@@ -35,9 +35,11 @@ import jdk.incubator.code.dialect.core.CoreOp;
 import jdk.incubator.code.dialect.java.JavaOp;
 import jdk.incubator.code.dialect.java.MethodRef;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class LambdaOpWrapper extends OpWrapper<JavaOp.LambdaOp> {
     public LambdaOpWrapper( MethodHandles.Lookup lookup, JavaOp.LambdaOp op) {
@@ -92,6 +94,9 @@ public class LambdaOpWrapper extends OpWrapper<JavaOp.LambdaOp> {
             }
         });
         Object[] args = new Object[method.getParameterCount()];
+        System.out.println("Var Load Names Length: " + varLoadNames.length);
+        System.out.println("args Length: " + args.length);
+        Arrays.stream(varLoadNames).forEach(System.out::println);
         if (args.length != varLoadNames.length) {
             throw new IllegalStateException("Why don't we have enough captures.!! ");
         }

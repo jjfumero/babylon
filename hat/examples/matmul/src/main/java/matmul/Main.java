@@ -30,6 +30,7 @@ import hat.ComputeRange;
 import hat.GlobalMesh1D;
 import hat.GlobalMesh2D;
 import hat.KernelContext;
+import hat.LocalMesh1D;
 import hat.LocalMesh2D;
 import hat.backend.Backend;
 import hat.buffer.F32Array;
@@ -153,8 +154,8 @@ public class Main {
     }
 
     @CodeReflection
-    public static void matrixMultiply1D(@RO ComputeContext cc, @RO F32Array matrixA, @RO F32Array matrixB, @RW  F32Array matrixC, int globalSize) {
-        ComputeRange computeRange = new ComputeRange(new GlobalMesh1D(globalSize));
+    public static void matrixMultiply1D(@RO ComputeContext cc, @RO F32Array matrixA, @RO F32Array matrixB, @RW  F32Array matrixC, int globalSize, int localSize) {
+        ComputeRange computeRange = new ComputeRange(new GlobalMesh1D(globalSize), new LocalMesh1D(localSize));
         cc.dispatchKernel(computeRange,
                 kc -> matrixMultiplyKernel1D(kc, matrixA, matrixB, matrixC, globalSize)
         );
@@ -172,7 +173,9 @@ public class Main {
 
     @CodeReflection
     public static void matrixMultiply2D(@RO ComputeContext cc, @RO F32Array matrixA, @RO F32Array matrixB, @RW  F32Array matrixC, int globalSize) {
-        ComputeRange computeRange = new ComputeRange(new GlobalMesh2D(globalSize, globalSize), new LocalMesh2D(BLOCK_SIZE, BLOCK_SIZE));
+        GlobalMesh2D globalMesh2D = new GlobalMesh2D(globalSize, globalSize);
+        LocalMesh2D localMesh2D = new LocalMesh2D(16, 16);
+        ComputeRange computeRange = new ComputeRange(globalMesh2D, localMesh2D);
         cc.dispatchKernel(computeRange,
                 kc -> matrixMultiplyKernel2D(kc, matrixA, matrixB, matrixC, globalSize)
         );
@@ -258,12 +261,16 @@ public class Main {
         // Run Seq for reference
         runSequential(matrixA, matrixB, resultSeq, size);
 
+        int[] localGroupSizes = new int[] {1, 2, 4, 8, 16, 32, 64, 128, 256, 512};
+
         for (int it = 0; it < NUM_ITERATIONS; it++) {
 
             long start = System.nanoTime();
+            final int localIndex = it;
+            Integer localSize = new Integer(localGroupSizes[localIndex]);
             switch (configuration) {
                 case _1D -> accelerator.compute(cc ->
-                        Main.matrixMultiply1D(cc, matrixA, matrixB, matrixC, size));
+                        Main.matrixMultiply1D(cc, matrixA, matrixB, matrixC, size,  localGroupSizes[localIndex]));
                 case _1DFC -> accelerator.compute(cc ->
                         Main.matrixMultiply1DWithFunctionCalls(cc, matrixA, matrixB, matrixC, size));
                 case _2D -> accelerator.compute(cc ->
