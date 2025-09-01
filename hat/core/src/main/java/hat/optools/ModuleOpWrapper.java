@@ -74,7 +74,7 @@ public class ModuleOpWrapper extends OpWrapper<CoreOp.ModuleOp> {
 
         entry.selectCalls((invokeOpWrapper) -> {
             MethodRef methodRef = invokeOpWrapper.methodRef();
-            Method method = null;
+            Method method;
             Class<?> javaRefTypeClass = invokeOpWrapper.javaRefClass().orElseThrow();
             try {
                 method = methodRef.resolveToMethod(l, invokeOpWrapper.op().invokeKind());

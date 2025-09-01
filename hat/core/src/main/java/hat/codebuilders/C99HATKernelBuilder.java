@@ -99,6 +99,10 @@ public abstract class C99HATKernelBuilder<T extends C99HATKernelBuilder<T>> exte
                     intDeclaration("biy").semicolonNl();
                     intDeclaration("biz").semicolonNl();
                 });
+//                .typedefStructOrUnion(true, "MyPrivateArray", _ -> {
+//                        intDeclaration("length").semicolonNl()
+//                        .emitText("float array[1]").semicolonNl();
+//                });
     }
 
     T typedefStructOrUnion(boolean isStruct, String name, Consumer<T> consumer) {

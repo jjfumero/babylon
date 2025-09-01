@@ -24,8 +24,6 @@
  */
 package hat.optools;
 
-import hat.buffer.Buffer;
-
 import hat.ifacemapper.MappableIface;
 import jdk.incubator.code.Block;
 import jdk.incubator.code.Body;
@@ -37,7 +35,6 @@ import jdk.incubator.code.dialect.java.JavaOp;
 import jdk.incubator.code.dialect.java.ClassType;
 import jdk.incubator.code.dialect.java.JavaType;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -47,7 +44,7 @@ import java.util.stream.Stream;
 
 public class OpWrapper<T extends Op> {
     @SuppressWarnings("unchecked")
-    public static <O extends Op, OW extends OpWrapper<O>> OW wrap(MethodHandles.Lookup lookup,O op) {
+    public static <O extends Op, OW extends OpWrapper<O>> OW wrap(MethodHandles.Lookup lookup, O op) {
         // We have one special case
         // This is possibly a premature optimization. But it allows us to treat vardeclarations differently from params.
         if (op instanceof CoreOp.VarOp varOp && !varOp.isUninitialized()) {

@@ -153,18 +153,18 @@ public class ComputeCallGraph extends CallGraph<ComputeEntrypoint> {
             Class<?> javaRefClass = invokeWrapper.javaRefClass().orElseThrow();
             Method invokeWrapperCalledMethod = invokeWrapper.method();
             if (Buffer.class.isAssignableFrom(javaRefClass)) {
-                // System.out.println("iface mapped buffer call  -> " + methodRef);
+//                System.out.println("iface mapped buffer call  -> " + methodRef);
                 computeReachableResolvedMethodCall.addCall(methodRefToMethodCallMap.computeIfAbsent(methodRef, _ ->
                         new ComputeReachableIfaceMappedMethodCall(this, methodRef, invokeWrapperCalledMethod)
                 ));
             } else if (Accelerator.class.isAssignableFrom(javaRefClass)) {
-                // System.out.println("call on the accelerator (must be through the computeContext) -> " + methodRef);
+//                System.out.println("call on the accelerator (must be through the computeContext) -> " + methodRef);
                 computeReachableResolvedMethodCall.addCall(methodRefToMethodCallMap.computeIfAbsent(methodRef, _ ->
                         new ComputeReachableAcceleratorMethodCall(this, methodRef, invokeWrapperCalledMethod)
                 ));
 
             } else if (ComputeContext.class.isAssignableFrom(javaRefClass)) {
-                // System.out.println("call on the computecontext -> " + methodRef);
+//                System.out.println("call on the computecontext -> " + methodRef);
                 computeReachableResolvedMethodCall.addCall(methodRefToMethodCallMap.computeIfAbsent(methodRef, _ ->
                         new ComputeContextMethodCall(this, methodRef, invokeWrapperCalledMethod)
                 ));
@@ -173,25 +173,25 @@ public class ComputeCallGraph extends CallGraph<ComputeEntrypoint> {
                 if (optionalFuncOp.isPresent()) {
                     FuncOpWrapper fow = OpWrapper.wrap(computeContext.accelerator.lookup, optionalFuncOp.get());
                     if (isKernelDispatch(invokeWrapperCalledMethod, fow)) {
-                        // System.out.println("A kernel reference (not a direct call) to a kernel " + methodRef);
+//                        System.out.println("A kernel reference (not a direct call) to a kernel " + methodRef);
                         kernelCallGraphMap.computeIfAbsent(methodRef, _ ->
                                 new KernelCallGraph(this, methodRef, invokeWrapperCalledMethod, fow).close()
                         );
                     } else {
-                        // System.out.println("A call to a method on the compute class which we have code model for " + methodRef);
+//                        System.out.println("A call to a method on the compute class which we have code model for " + methodRef);
                         computeReachableResolvedMethodCall.addCall(methodRefToMethodCallMap.computeIfAbsent(methodRef, _ ->
                                 new OtherComputeReachableResolvedMethodCall(this, methodRef, invokeWrapperCalledMethod, fow)
                         ));
                     }
                 } else {
-                    //  System.out.println("A call to a method on the compute class which we DO NOT have code model for " + methodRef);
+//                    System.out.println("A call to a method on the compute class which we DO NOT have code model for " + methodRef);
                     computeReachableResolvedMethodCall.addCall(methodRefToMethodCallMap.computeIfAbsent(methodRef, _ ->
                             new ComputeReachableUnresolvedMethodCall(this, methodRef, invokeWrapperCalledMethod)
                     ));
                 }
             } else {
                 //TODO what about ifacenestings?
-                // System.out.println("A call to a method on the compute class which we DO NOT have code model for " + methodRef);
+//                System.out.println("A call to a method on the compute class which we DO NOT have code model for " + methodRef);
                 computeReachableResolvedMethodCall.addCall(methodRefToMethodCallMap.computeIfAbsent(methodRef, _ ->
                         new ComputeReachableUnresolvedMethodCall(this, methodRef, invokeWrapperCalledMethod)
                 ));

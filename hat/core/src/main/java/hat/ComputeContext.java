@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -144,7 +144,7 @@ public class ComputeContext implements BufferAllocator, BufferTracker {
 
     private CallGraph buildKernelCallGraph(QuotableKernelContextConsumer quotableKernelContextConsumer) {
         Quoted quoted = Op.ofQuotable(quotableKernelContextConsumer).orElseThrow();
-        LambdaOpWrapper lambdaOpWrapper = OpWrapper.wrap(computeCallGraph.computeContext.accelerator.lookup,(JavaOp.LambdaOp) quoted.op());
+        LambdaOpWrapper lambdaOpWrapper = OpWrapper.wrap(computeCallGraph.computeContext.accelerator.lookup, (JavaOp.LambdaOp) quoted.op());
         MethodRef methodRef = lambdaOpWrapper.getQuotableTargetMethodRef();
         KernelCallGraph kernelCallGraph = computeCallGraph.kernelCallGraphMap.get(methodRef);
         return new CallGraph(quoted, lambdaOpWrapper, methodRef, kernelCallGraph);
@@ -175,6 +175,9 @@ public class ComputeContext implements BufferAllocator, BufferTracker {
             Object[] args = cg.lambdaOpWrapper.getQuotableCapturedValues(cg.quoted, cg.kernelCallGraph.entrypoint.method);
             NDRange ndRange = accelerator.range(computeRange);
             args[0] = ndRange;
+            // associate kernel-context calls with invokes
+
+            //
             accelerator.backend.dispatchKernel(cg.kernelCallGraph, ndRange, args);
         } catch (Throwable t) {
             System.out.print("what?" + cg.methodRef + " " + t);

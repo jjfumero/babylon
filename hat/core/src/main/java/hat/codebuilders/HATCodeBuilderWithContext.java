@@ -25,6 +25,7 @@
 package hat.codebuilders;
 
 
+import hat.buffer.Buffer;
 import hat.ifacemapper.BoundSchema;
 import hat.ifacemapper.Schema;
 import hat.optools.BinaryArithmeticOrLogicOperation;
@@ -58,8 +59,14 @@ import hat.util.StreamCounter;
 
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.StructLayout;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Stack;
 
 import jdk.incubator.code.Op;
+import jdk.incubator.code.Value;
 import jdk.incubator.code.dialect.core.CoreOp;
 import jdk.incubator.code.dialect.java.ClassType;
 import jdk.incubator.code.dialect.java.JavaOp;
@@ -169,14 +176,42 @@ public abstract class HATCodeBuilderWithContext<T extends HATCodeBuilderWithCont
         return self();
     }
 
+    public String extractClassType(CodeBuilderContext buildContext,JavaType javaType) {
+        if (InvokeOpWrapper.isIfaceUsingLookup(buildContext.lookup(),javaType) && javaType instanceof ClassType classType) {
+            String name = classType.toClassName();
+            int dotIdx = name.lastIndexOf('.');
+            int dollarIdx = name.lastIndexOf('$');
+            int idx = Math.max(dotIdx, dollarIdx);
+            if (idx > 0) {
+                name = name.substring(idx + 1);
+            }
+            return name;
+        } else {
+            throw new IllegalStateException("extract class type ");
+        }
+    }
+
+    record LocalArrayDeclaration(String typeName, String varName) {}
+    private Stack<LocalArrayDeclaration> localArrayDeclarations = new Stack<>();
+
     @Override
     public T varDeclaration(CodeBuilderContext buildContext, VarDeclarationOpWrapper varDeclarationOpWrapper) {
         if (varDeclarationOpWrapper.op().isUninitialized()) {
             // Variable is uninitialized
             type(buildContext,varDeclarationOpWrapper.javaType()).space().identifier(varDeclarationOpWrapper.varName());
         } else {
-            type(buildContext,varDeclarationOpWrapper.javaType()).space().identifier(varDeclarationOpWrapper.varName()).space().equals().space();
-            parencedence(buildContext, varDeclarationOpWrapper, varDeclarationOpWrapper.operandNAsResult(0).op());
+            // if type is Buffer (iMappable), then we ignore it and pass it along to the methodCall
+            JavaType javaType = varDeclarationOpWrapper.javaType();
+            if (InvokeOpWrapper.isIfaceUsingLookup(buildContext.lookup(), javaType) && javaType instanceof ClassType classType) {
+                emitText(" // Local Declaration for: " + varDeclarationOpWrapper.javaType().toString()).nl();
+                String typeName = extractClassType(buildContext, varDeclarationOpWrapper.javaType());
+                String varName = varDeclarationOpWrapper.varName();
+                localArrayDeclarations.push(new LocalArrayDeclaration(typeName, varName));
+                parencedence(buildContext, varDeclarationOpWrapper, varDeclarationOpWrapper.operandNAsResult(0).op());
+            } else {
+                type(buildContext, varDeclarationOpWrapper.javaType()).space().identifier(varDeclarationOpWrapper.varName()).space().equals().space();
+                parencedence(buildContext, varDeclarationOpWrapper, varDeclarationOpWrapper.operandNAsResult(0).op());
+            }
         }
         return self();
     }
@@ -191,7 +226,8 @@ public abstract class HATCodeBuilderWithContext<T extends HATCodeBuilderWithCont
     public T fieldLoad(CodeBuilderContext buildContext, FieldLoadOpWrapper fieldLoadOpWrapper) {
         if (fieldLoadOpWrapper.isKernelContextAccess()) {
             identifier("kc").rarrow().identifier(fieldLoadOpWrapper.fieldName());
-        } else if (fieldLoadOpWrapper.isStaticFinalPrimitive()) {    Object value = fieldLoadOpWrapper.getStaticFinalPrimitiveValue();
+        } else if (fieldLoadOpWrapper.isStaticFinalPrimitive()) {
+            Object value = fieldLoadOpWrapper.getStaticFinalPrimitiveValue();
             literal(value.toString());
         } else {
             throw new IllegalStateException("What is this field load ?" + fieldLoadOpWrapper.fieldRef());
@@ -586,51 +622,138 @@ public abstract class HATCodeBuilderWithContext<T extends HATCodeBuilderWithCont
                           cascade->tree + treeIdx;
                  */
 
-                    if (returnType instanceof ClassType classType) {
-                        ampersand();
+                    //
+                    if (name.startsWith("createPrivate")) {
+                        emitText(" /// FOUND THE CALL ").nl();
+                        // simple declaration
+                        LocalArrayDeclaration declaration = localArrayDeclarations.pop();
+
+                        String varName = declaration.varName + "$private";
+                        String type = declaration.typeName;
+
+                        var valueOperandSize = invokeOpWrapper.operands().get(1);
+                        Integer size = obtainSize(valueOperandSize);
+                        if (size == null) {
+                            throw new IllegalStateException("size is null");
+                        }
+                        size += 1;
+
+                        // Private declaration
+                        emitText("float")
+                                .space()
+                                .emitText(varName)
+                                .emitText("[")
+                                .emitText(size.toString())
+                                .emitText("]")
+                                .semicolonNl();
+
+                        // Typecast
+                        suffix_t(type)
+                                .space()
+                                .asterisk()
+                                .emitText(declaration.varName)
+                                .equals()
+                                .oparen()
+                                .suffix_t(type)
+                                .asterisk()
+                                .cparen()
+                                .space()
+                                .emitText(varName)
+                                .semicolon()
+                                .nl();
+                    } else if (name.startsWith("createLocal")) {
+                        lineComment(" /// Local Access  ").nl();
+                        // simple declaration
+                        LocalArrayDeclaration declaration = localArrayDeclarations.pop();
+
+                        String varName = declaration.varName + "$local";
+                        String type = declaration.typeName;
+
+                        var valueOperandSize = invokeOpWrapper.operands().get(1);
+                        Integer size = obtainSize(valueOperandSize);
+                        if (size == null) {
+                            throw new IllegalStateException("size is null");
+                        }
+                        size += 1;
+
+                        // Private declaration
+                        emitText("__local")
+                                .space()
+                                .emitText("float")
+                                .space()
+                                .emitText(varName)
+                                .emitText("[")
+                                .emitText(size.toString())
+                                .emitText("]")
+                                .semicolonNl();
+
+                        // Typecast
+                        emitText("__local")
+                                .space()
+                                .suffix_t(type)
+                                .space()
+                                .asterisk()
+                                .emitText(declaration.varName)
+                                .equals()
+                                .oparen()
+                                .emitText("__local")
+                                .space()
+                                .suffix_t(type)
+                                .asterisk()
+                                .cparen()
+                                .space()
+                                .emitText(varName)
+                                .semicolon()
+                                .nl();
+
+                    } else {
+
+                        if (returnType instanceof ClassType classType) {
+                            ampersand();
                     /* This is way more complicated I think we need to determine the expression type.
 
 
                      sumOfThisStage=sumOfThisStage+&left->anon->value; from    sumOfThisStage += left.anon().value();
 
                      */
-                    }
-                    recurse(buildContext, OpWrapper.wrap(buildContext.lookup(),instanceResult.op()));
-                    rarrow().identifier(name);
-                    //if (invokeOpWrapper.name().equals("value") || invokeOpWrapper.name().equals("anon")){
-                    //System.out.println("value|anon");
-                    // }
-                    if (returnType instanceof PrimitiveType primitiveType && primitiveType.isVoid()) {
-                        //   setter
-                        switch (operandCount) {
-                            case 2: {
-                                if (invokeOpWrapper.operandNAsResult(1) instanceof Op.Result result1) {
-                                    equals().recurse(buildContext, OpWrapper.wrap(buildContext.lookup(),result1.op()));
-                                } else {
-                                    throw new IllegalStateException("How ");
-                                }
-                                break;
-                            }
-                            case 3: {
-                                if (invokeOpWrapper.operandNAsResult(1) instanceof Op.Result result1
-                                        && invokeOpWrapper.operandNAsResult(2) instanceof Op.Result result2) {
-                                    sbrace(_ -> recurse(buildContext, OpWrapper.wrap(buildContext.lookup(),result1.op())));
-                                    equals().recurse(buildContext, OpWrapper.wrap(buildContext.lookup(),result2.op()));
-                                } else {
-                                    throw new IllegalStateException("How ");
-                                }
-                                break;
-                            }
-                            default: {
-                                throw new IllegalStateException("How ");
-                            }
                         }
-                    } else {
-                        if (invokeOpWrapper.operandNAsResult(1) instanceof Op.Result result1) {
-                            var rhs = OpWrapper.wrap(buildContext.lookup(),result1.op());
-                            sbrace(_ -> recurse(buildContext, rhs));
+                        recurse(buildContext, OpWrapper.wrap(buildContext.lookup(), instanceResult.op()));
+                        rarrow().identifier(name);
+                        //if (invokeOpWrapper.name().equals("value") || invokeOpWrapper.name().equals("anon")){
+                        //System.out.println("value|anon");
+                        // }
+                        if (returnType instanceof PrimitiveType primitiveType && primitiveType.isVoid()) {
+                            //   setter
+                            switch (operandCount) {
+                                case 2: {
+                                    if (invokeOpWrapper.operandNAsResult(1) instanceof Op.Result result1) {
+                                        equals().recurse(buildContext, OpWrapper.wrap(buildContext.lookup(), result1.op()));
+                                    } else {
+                                        throw new IllegalStateException("How ");
+                                    }
+                                    break;
+                                }
+                                case 3: {
+                                    if (invokeOpWrapper.operandNAsResult(1) instanceof Op.Result result1
+                                            && invokeOpWrapper.operandNAsResult(2) instanceof Op.Result result2) {
+                                        sbrace(_ -> recurse(buildContext, OpWrapper.wrap(buildContext.lookup(), result1.op())));
+                                        equals().recurse(buildContext, OpWrapper.wrap(buildContext.lookup(), result2.op()));
+                                    } else {
+                                        throw new IllegalStateException("How ");
+                                    }
+                                    break;
+                                }
+                                default: {
+                                    throw new IllegalStateException("How ");
+                                }
+                            }
                         } else {
-                            // This is a simple usage.   So scaleTable->multiScaleAccumRange
+                            if (invokeOpWrapper.operandNAsResult(1) instanceof Op.Result result1) {
+                                var rhs = OpWrapper.wrap(buildContext.lookup(), result1.op());
+                                sbrace(_ -> recurse(buildContext, rhs));
+                            } else {
+                                // This is a simple usage.   So scaleTable->multiScaleAccumRange
+                            }
                         }
                     }
                 } else {
@@ -639,17 +762,42 @@ public abstract class HATCodeBuilderWithContext<T extends HATCodeBuilderWithCont
 
             }
         } else {
-            identifier(name).paren(_ ->
-                    commaSeparated(invokeOpWrapper.operands(), (op) -> {
-                        if (op instanceof Op.Result result) {
-                            recurse(buildContext, OpWrapper.wrap(buildContext.lookup(),result.op()));
-                        } else {
-                            throw new IllegalStateException("wtf?");
-                        }
-                    })
-            );
+            emitText("// What is this? " + name).semicolon().nl();
+            if (name.equals("createLocal")) {
+                // Ideally, we will have a new Op to represent schema allocations within the kernel.
+                // As a first prototype, we need to build the engine to complete the structs-code-gen
+                // so they can be used by the new Ops.
+                List<Value> operands = invokeOpWrapper.operands();
+
+                Integer size = obtainSize(operands.get(2)); // obtain last parameter which maps to the schema size
+                if (size == null || size <= 0) {
+                    throw new IllegalStateException("<size> illegal size");
+                }
+                emitText(" // Allocation of an schema with size ?? " + size);
+            } else {
+                identifier(name).paren(_ ->
+                        commaSeparated(invokeOpWrapper.operands(), (op) -> {
+                            if (op instanceof Op.Result result) {
+                                recurse(buildContext, OpWrapper.wrap(buildContext.lookup(), result.op()));
+                            } else {
+                                throw new IllegalStateException("wtf?");
+                            }
+                        })
+                );
+            }
         }
         return self();
+    }
+
+    private Integer obtainSize(Value parameter) {
+        if (parameter instanceof Op.Result opResult) {
+            if (opResult.op() instanceof CoreOp.ConstantOp constantOp) {
+                if (constantOp.value() instanceof Integer schemaArraySize) {
+                    return schemaArraySize;
+                }
+            }
+        }
+        return null;
     }
 
     @Override

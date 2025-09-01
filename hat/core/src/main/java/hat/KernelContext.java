@@ -24,6 +24,12 @@
  */
 package hat;
 
+import hat.api.HatInliningBoundary;
+import hat.api.Space;
+import hat.buffer.Buffer;
+import hat.ifacemapper.Schema;
+import hat.optools.InvokeOpWrapper;
+
 /**
  * Created by a dispatch call to a kernel from within a Compute method and 'conceptually' passed to a kernel.
  * <p>
@@ -78,6 +84,13 @@ public class KernelContext {
 
     private ComputeRange computeRange;
 
+    private ArgsLocalAllocations argsLocalAllocations;
+
+    /**
+     * NDRange Kernel
+     * @param ndRange {@link NDRange}
+     * @param computeRange {@link ComputeRange}
+     */
     public KernelContext(NDRange ndRange, ComputeRange computeRange) {
         this.ndRange = ndRange;
         this.computeRange = computeRange;
@@ -107,7 +120,7 @@ public class KernelContext {
     }
 
     /**
-     * 1D Kernel
+     * 2D Kernel
      * @param ndRange {@link NDRange}
      * @param maxX Global number of threads for the first dimension (1D)
      * @param maxY Global number of threads for the second dimension (2D)
@@ -126,7 +139,7 @@ public class KernelContext {
     }
 
     /**
-     * 1D Kernel
+     * 3D Kernel
      * @param ndRange {@link NDRange}
      * @param maxX Global number of threads for the first dimension (1D)
      * @param maxY Global number of threads for the second dimension (2D)
@@ -164,4 +177,17 @@ public class KernelContext {
         return false;
     }
 
+    public ArgsLocalAllocations getArgsLocalAllocations() {
+        return this.argsLocalAllocations;
+    }
+
+    // Do not Inline: We need to prevent inlining for this call
+    @HatInliningBoundary
+    public <T extends Buffer> T allocateSchema(final Space space, final Schema<T> schema, int size) {
+        // FIXME: it should be a list of args allocations
+        this.argsLocalAllocations = new ArgsLocalAllocations<>(space, schema, size);
+
+        // Handle call for the host side
+        return schema.allocate(ndRange.accelerator, size);
+    }
 }

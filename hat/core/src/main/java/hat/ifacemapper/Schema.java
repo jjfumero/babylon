@@ -298,8 +298,6 @@ public class Schema<T extends Buffer> {
                 parentFieldConsumer.accept(ifaceType);
                 this.ifaceType.addIfaceTypeNode(ifaceType);
                 this.ifaceType.fieldControlledArray(name, arrayLenFields, stride);
-
-
                 return this.ifaceType;
             }
 
