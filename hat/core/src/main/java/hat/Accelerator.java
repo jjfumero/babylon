@@ -224,7 +224,7 @@ public class Accelerator implements BufferAllocator, BufferTracker {
                 new ComputeContext(this, method)
         );
         // Here we get the captured values  from the Quotable
-        Object[] args = OpTk.getQuotableCapturedValues(lambda,quoted, method);
+        Object[] args = OpTk.getQuotableCapturedValues(lambda, quoted, method);
         args[0] = computeContext;
 
         // now ask the backend to execute

@@ -25,29 +25,60 @@
 
 package hat.backend.java;
 
-
 import hat.NDRange;
 import hat.callgraph.KernelCallGraph;
 import hat.callgraph.KernelEntrypoint;
 
 import java.lang.reflect.InvocationTargetException;
 
-
 public class JavaSequentialBackend extends JavaBackend {
-    @Override
-    public void dispatchKernel(KernelCallGraph kernelCallGraph, NDRange ndRange, Object... args) {
-        KernelEntrypoint kernelEntrypoint = kernelCallGraph.entrypoint;
-        for (ndRange.kid.x = 0; ndRange.kid.x < ndRange.kid.maxX; ndRange.kid.x++) {
-            try {
-                args[0] = ndRange.kid;
-                kernelEntrypoint.method.invoke(null, args);
-            } catch (IllegalAccessException e) {
-                throw new RuntimeException(e);
-            } catch (InvocationTargetException e) {
-                throw new RuntimeException(e);
-            }
 
+    private void run(KernelEntrypoint kernelEntrypoint, NDRange ndRange, Object... args) {
+        try {
+            args[0] = ndRange.kid;
+            kernelEntrypoint.method.invoke(null, args);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new RuntimeException(e);
         }
     }
 
+    private void dispatch1D(KernelCallGraph kernelCallGraph, NDRange ndRange, Object... args) {
+        KernelEntrypoint kernelEntrypoint = kernelCallGraph.entrypoint;
+        for (ndRange.kid.x = 0; ndRange.kid.x < ndRange.kid.maxX; ndRange.kid.x++) {
+            run(kernelEntrypoint, ndRange, args);
+        }
+    }
+
+    private void dispatch2D(KernelCallGraph kernelCallGraph, NDRange ndRange, Object... args) {
+        KernelEntrypoint kernelEntrypoint = kernelCallGraph.entrypoint;
+        for (ndRange.kid.x = 0; ndRange.kid.x < ndRange.kid.maxX; ndRange.kid.x++) {
+            for (ndRange.kid.y = 0; ndRange.kid.y < ndRange.kid.maxY; ndRange.kid.y++) {
+                run(kernelEntrypoint, ndRange, args);
+            }
+        }
+    }
+
+    private void dispatch3D(KernelCallGraph kernelCallGraph, NDRange ndRange, Object... args) {
+        KernelEntrypoint kernelEntrypoint = kernelCallGraph.entrypoint;
+        for (ndRange.kid.x = 0; ndRange.kid.x < ndRange.kid.maxX; ndRange.kid.x++) {
+            for (ndRange.kid.y = 0; ndRange.kid.y < ndRange.kid.maxY; ndRange.kid.y++) {
+                for (ndRange.kid.z = 0; ndRange.kid.z < ndRange.kid.maxZ; ndRange.kid.z++) {
+                    run(kernelEntrypoint, ndRange, args);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void dispatchKernel(KernelCallGraph kernelCallGraph, NDRange ndRange, Object... args) {
+        // Dispatch 1D, 2D or 3D
+        int dimensions = ndRange.kid.getDimensions();
+        switch (dimensions) {
+            case 1 -> dispatch1D(kernelCallGraph, ndRange, args);
+            case 2 -> dispatch2D(kernelCallGraph, ndRange, args);
+            case 3 -> dispatch3D(kernelCallGraph, ndRange, args);
+            default -> throw new IllegalArgumentException("Invalid dimensions " + dimensions);
+        }
+    }
 }
+

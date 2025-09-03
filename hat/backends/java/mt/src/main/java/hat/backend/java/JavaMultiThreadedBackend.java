@@ -41,14 +41,12 @@ public class JavaMultiThreadedBackend extends JavaBackend {
     public void dispatchKernel(KernelCallGraph kernelCallGraph, NDRange ndRange, Object... args) {
         KernelEntrypoint kernelEntrypoint = kernelCallGraph.entrypoint;
         instance(ndRange.accelerator).forEachInRange(ndRange, (range) -> {
-            Object[] a = Arrays.copyOf(args, args.length); // Annoying.  we need to replace the args[0] but don't want to race other threads.
+            Object[] argsPerThread = Arrays.copyOf(args, args.length); // Annoying.  we need to replace the args[0] but don't want to race other threads.
             try {
-                KernelContext c = range.kid;
-                a[0] = c;
-                kernelEntrypoint.method.invoke(null, a);
-            } catch (IllegalAccessException e) {
-                throw new RuntimeException(e);
-            } catch (InvocationTargetException e) {
+                KernelContext kerneContext = range.kid;
+                argsPerThread[0] = kerneContext;
+                kernelEntrypoint.method.invoke(null, argsPerThread);
+            } catch (IllegalAccessException | InvocationTargetException e) {
                 throw new RuntimeException(e);
             }
 
