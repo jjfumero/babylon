@@ -73,6 +73,7 @@ public class JavaSequentialBackend extends JavaBackend {
     public void dispatchKernel(KernelCallGraph kernelCallGraph, NDRange ndRange, Object... args) {
         // Dispatch 1D, 2D or 3D
         int dimensions = ndRange.kid.getDimensions();
+        // The following dispatches work assuming there are no LocalMesh used/configured.
         switch (dimensions) {
             case 1 -> dispatch1D(kernelCallGraph, ndRange, args);
             case 2 -> dispatch2D(kernelCallGraph, ndRange, args);
