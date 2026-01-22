@@ -116,6 +116,18 @@ public interface F16 extends HAType {
         return F16.of(f16ToFloat(hb) / f32);
     }
 
+    static F16 max(F16 ha, F16 hb) {
+        return F16.of(Math.max(f16ToFloat(ha), f16ToFloat(hb)));
+    }
+
+    static F16 min(F16 ha, F16 hb) {
+        return F16.of(Math.min(f16ToFloat(ha), f16ToFloat(hb)));
+    }
+
+    static F16 exp(F16 ha) {
+        return F16.of((float) Math.exp(f16ToFloat(ha)));
+    }
+
     default F16 add(F16 ha) {
         return F16.add(this, ha);
     }
@@ -131,4 +143,5 @@ public interface F16 extends HAType {
     default F16 div(F16 ha) {
         return F16.div(this, ha);
     }
+
 }

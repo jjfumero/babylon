@@ -79,6 +79,8 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
                 .hashDefine("HAT_BSZ", _ -> paren(_ -> identifier("get_num_groups").paren(_ -> intConstTwo())))
                 .hashDefine("HAT_BARRIER", _ -> identifier("barrier").oparen().identifier("CLK_LOCAL_MEM_FENCE").cparen())
                 .hashDefine("BFLOAT16", _ -> keyword("ushort"))
+                .macro("MAX", _ -> identifier("(a, b) (((a) > (b)) ? (a) : (b))"))
+                .macro("MIN", _ -> identifier("(a, b) (((a) < (b)) ? (a) : (b))"))
                 .typedefSingleValueStruct("F16",  "half")
                 .typedefSingleValueStruct("BF16",  "BFLOAT16")
                 .unionBfloat16()

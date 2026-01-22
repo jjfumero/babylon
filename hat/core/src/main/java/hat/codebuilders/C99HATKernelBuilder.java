@@ -28,6 +28,7 @@ import hat.KernelContext;
 import hat.buffer.BF16Array;
 import hat.buffer.F16Array;
 import hat.device.DeviceType;
+import hat.dialect.BinaryOpEnum;
 import hat.dialect.HATBarrierOp;
 import hat.dialect.HATF16Op;
 import hat.dialect.HATMemoryDefOp;
@@ -497,33 +498,86 @@ public abstract class C99HATKernelBuilder<T extends C99HATKernelBuilder<T>> exte
     }
 
     @Override
-    public T hatF16BinaryOp( HATF16Op.HATF16BinaryOp hatF16BinaryOp) {
+    public T hatF16BinaryOp(HATF16Op.HATF16BinaryOp hatF16BinaryOp) {
         ReducedFloatType reducedFloatType = hatF16BinaryOp.reducedFloatType();
         if (reducedFloatType instanceof ReducedFloatType.BFloat16) {
-            return binaryOperationsForBfloat16( hatF16BinaryOp);
+            return binaryOperationsForBfloat16(hatF16BinaryOp);
+        }
+        if (hatF16BinaryOp.binaryOperationType() == BinaryOpEnum.MAX) {
+            return hatF16BinaryOpMax(hatF16BinaryOp);
         }
         paren(_-> f16Type());
-        return brace(_->
-            paren(_-> {
-                recurse( OpHelper.asResultOrThrow(hatF16BinaryOp.operands().getFirst()).op());
-                if (hatF16BinaryOp.references().getFirst()) {
-                    rarrow().identifier("value");
-                } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().getFirst())) {
-                    dot().identifier("value");
-                } else {
-                    blockComment("hatF16BinaryOp not a result !!");
-                }
-                space().identifier(hatF16BinaryOp.binaryOperationType().symbol()).space();
-                recurse( OpHelper.asResultOrThrow(hatF16BinaryOp.operands().get(1)).op());
-                if (hatF16BinaryOp.references().get(1)) {
-                    rarrow().identifier("value");
-                } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().get(1))) {
-                    dot().identifier("value");
-                }else {
-                    blockComment("hatF16BinaryOp not a value !!");
-                }
-            })
+        return brace(_ ->
+                paren(_ -> {
+                    recurse(OpHelper.asResultOrThrow(hatF16BinaryOp.operands().getFirst()).op());
+                    if (hatF16BinaryOp.references().getFirst()) {
+                        rarrow().identifier("value");
+                    } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().getFirst())) {
+                        dot().identifier("value");
+                    } else {
+                        blockComment("hatF16BinaryOp not a result !!");
+                    }
+                    space().identifier(hatF16BinaryOp.binaryOperationType().symbol()).space();
+                    recurse(OpHelper.asResultOrThrow(hatF16BinaryOp.operands().get(1)).op());
+                    if (hatF16BinaryOp.references().get(1)) {
+                        rarrow().identifier("value");
+                    } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().get(1))) {
+                        dot().identifier("value");
+                    } else {
+                        blockComment("hatF16BinaryOp not a value !!");
+                    }
+                })
         );
+    }
+
+    public T hatF16BinaryOpMax(HATF16Op.HATF16BinaryOp hatF16BinaryOp) {
+        paren(_-> f16Type());
+        brace( _ -> {
+            // In OpenCL, max function for half type does not exist
+            // so we need to add an intrinsic (MAX(a, b);
+            identifier("MAX(");
+            recurse(OpHelper.asResultOrThrow(hatF16BinaryOp.operands().getFirst()).op());
+            if (hatF16BinaryOp.references().getFirst()) {
+                rarrow().identifier("value");
+            } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().getFirst())) {
+                dot().identifier("value");
+            } else {
+                blockComment("hatF16BinaryOp not a result !!");
+            }
+            identifier(",");
+            recurse(OpHelper.asResultOrThrow(hatF16BinaryOp.operands().get(1)).op());
+            if (hatF16BinaryOp.references().get(1)) {
+                rarrow().identifier("value");
+            } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().get(1))) {
+                dot().identifier("value");
+            } else {
+                blockComment("hatF16BinaryOp not a value !!");
+            }
+            cparen();
+
+            // If max were supported
+//            identifier("max").oparen();
+//            recurse(OpHelper.asResultOrThrow(hatF16BinaryOp.operands().getFirst()).op());
+//            if (hatF16BinaryOp.references().getFirst()) {
+//                rarrow().identifier("value");
+//            } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().getFirst())) {
+//                dot().identifier("value");
+//            } else {
+//                blockComment("hatF16BinaryOp not a result !!");
+//            }
+//            space().comma();
+//            recurse(OpHelper.asResultOrThrow(hatF16BinaryOp.operands().get(1)).op());
+//            if (hatF16BinaryOp.references().get(1)) {
+//                rarrow().identifier("value");
+//            } else if (!OpHelper.isPrimitiveResult(hatF16BinaryOp.operands().get(1))) {
+//                dot().identifier("value");
+//            } else {
+//                blockComment("hatF16BinaryOp not a value !!");
+//            }
+//            cparen();
+        });
+
+        return self();
     }
 
     @Override

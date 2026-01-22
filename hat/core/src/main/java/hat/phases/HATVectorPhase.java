@@ -128,7 +128,6 @@ public abstract sealed class HATVectorPhase implements HATPhase
         }).funcOp();
     }
 
-
     private HATVectorOp.HATVectorBinaryOp buildVectorBinaryOp(BinaryOpEnum opType, String varName, TypeElement resultType,
                                                               TypeElement vectorElementType, int witdh, List<Value> outputOperands) {
         return switch (opType) {
@@ -136,6 +135,7 @@ public abstract sealed class HATVectorPhase implements HATPhase
             case SUB -> new HATVectorOp.HATVectorBinaryOp.HATVectorSubOp(varName, resultType, vectorElementType, witdh, outputOperands);
             case MUL -> new HATVectorOp.HATVectorBinaryOp.HATVectorMulOp(varName, resultType, vectorElementType, witdh, outputOperands);
             case DIV -> new HATVectorOp.HATVectorBinaryOp.HATVectorDivOp(varName, resultType, vectorElementType, witdh, outputOperands);
+            case MIN, MAX -> throw new RuntimeException("Not supported yet");
         };
     }
 

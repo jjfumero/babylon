@@ -30,7 +30,9 @@ public enum BinaryOpEnum {
     ADD("+"),
     SUB("-"),
     MUL("*"),
-    DIV("/");
+    DIV("/"),
+    MAX("max"),
+    MIN("min");
 
     String symbol;
 
@@ -43,6 +45,8 @@ public enum BinaryOpEnum {
             case "sub" -> BinaryOpEnum.SUB;
             case "mul" -> BinaryOpEnum.MUL;
             case "div" -> BinaryOpEnum.DIV;
+            case "max" -> BinaryOpEnum.MAX;
+            case "min" -> BinaryOpEnum.MIN;
             default -> throw new RuntimeException("Unknown binary op " + invokeOp.invokeDescriptor().name());
         };
     }
