@@ -274,7 +274,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
 
         // Second parameters: analysis of the shape
         int[] shape = new int[3];
-        Value second = operands.get(1);
+        Value second = operands.get(0);
         if (second.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
             List<Value> shapeOperands = invokeOp.operands();
             for (int i = 0; i < shapeOperands.size(); i++) {
@@ -287,7 +287,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
 
         // The third parameter is the type. It could be `half` or `float` as first implementation
         // This parameter is another constant with the type
-        Value classOperand = operands.get(2);
+        Value classOperand = operands.get(1);
         Object klass = null;
         if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
             klass = constantOp.value();
@@ -299,7 +299,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
             varTensorName = tensorVarOp.varName();
         }
         final int size = shape[0] * shape[1];
-        if (tensorCreateOp.operands().size() > 3) {
+        if (tensorCreateOp.operands().size() > 2) {
             // Share memory only for the input tiles (tensors)
             // The accumulator is stored in private memory
             HAT_LOCAL_MEM().sp();
@@ -358,7 +358,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         if (tensorCreateValueOp.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
             // Second parameters: analysis of the shape
             int[] shape = new int[3];
-            Value second = tensorCreateOp.operands().get(1);
+            Value second = tensorCreateOp.operands().get(0);
             if (second.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
                 List<Value> shapeOperands = invokeOp.operands();
                 for (int i = 0; i < shapeOperands.size(); i++) {
@@ -377,7 +377,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         Value tensorCreateValueOp = tensorVarOp.operands().getFirst();
         if (tensorCreateValueOp.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
             // Parameter 3 defines the access layout
-            Value valueLayout = tensorCreateOp.operands().get(3);
+            Value valueLayout = tensorCreateOp.operands().get(2);
             return isColumnMajor(valueLayout);
         }
         return false;
