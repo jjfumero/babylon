@@ -77,9 +77,9 @@ public class Main {
         final int ldb = size;
         final int ldc = size;
 
-        Tensor tensorA = Tensor.create(Tensor.FIRST, Tensor.shape(16, 16, 16), F16.class, Tensor.ofColumnMajor());
-        Tensor tensorB = Tensor.create(Tensor.SECOND, Tensor.shape(16, 16, 16), F16.class, Tensor.ofColumnMajor());
-        Tensor acc = Tensor.create(Tensor.ACC, Tensor.shape(16, 16, 16), float.class);
+        Tensor tensorA = Tensor.create(Tensor.shape(16, 16, 16), F16.class, Tensor.ofColumnMajor());
+        Tensor tensorB = Tensor.create(Tensor.shape(16, 16, 16), F16.class, Tensor.ofColumnMajor());
+        Tensor acc = Tensor.create(Tensor.shape(16, 16, 16), float.class);
 
         Tensor.fill(acc, 0.0f);
 

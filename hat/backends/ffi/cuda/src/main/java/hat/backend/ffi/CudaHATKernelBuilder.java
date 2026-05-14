@@ -492,33 +492,74 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
 
     private static final String TENSOR_MATRIX_A = "matrix_a";
     private static final String TENSOR_MATRIX_B = "matrix_b";
-    private final String TENSOR_ACC = "accumulator";
+    private static final String TENSOR_ACC = "accumulator";
 
-    private String getMatrixOrder(Value valueParameter) {
-        if (valueParameter instanceof Op.Result r && r.op() instanceof JavaOp.FieldAccessOp.FieldLoadOp fieldLoadOp) {
-            FieldRef fieldRef = fieldLoadOp.fieldReference();
-            return switch (fieldRef.name()) {
-                case "FIRST" -> TENSOR_MATRIX_A;
-                case "SECOND" -> TENSOR_MATRIX_B;
-                default -> TENSOR_ACC;
-            };
-        }
-        return null;
+    private int getTensorOrder(Value tensorValue, Value v) {
+        return v instanceof Op.Result r ? getTensorOrder(tensorValue, r.op()) : -1;
     }
+
+    // We traverse the usages of the op until we find the MMA operation.
+    // Once the MMA is found, then we compare if the arguments (VarLoadOp) contains the
+    // reference to the var declartion being analyzed. In that case, we return its index.
+    private int getTensorOrder(Value tensorValue, Op op) {
+        int operandIndex = -1;
+        switch (op) {
+            case HATTensorOp.TensorMMAOp tensorMMAOp -> {
+                List<Value> operands = tensorMMAOp.operands();
+                for (Value argument : operands) {
+                    operandIndex++;
+                    if (argument.declaringElement() instanceof CoreOp.VarAccessOp.VarLoadOp varLoadOp
+                            && varLoadOp.operands().getFirst().equals(tensorValue)) {
+                        return operandIndex;
+                    }
+                }
+            }
+            default -> {
+                for (Op.Result use : op.result().uses()) {
+                    if ((operandIndex = getTensorOrder(tensorValue, use)) != -1) {
+                        return operandIndex;
+                    }
+                }
+            }
+        }
+        return operandIndex;
+    }
+
+    private static final Map<Integer, String> tensorOrderTable = new HashMap<>();
+    static {
+        tensorOrderTable.put(1, TENSOR_MATRIX_A);
+        tensorOrderTable.put(2, TENSOR_MATRIX_B);
+        tensorOrderTable.put(-1, TENSOR_MATRIX_A); // We set one by default
+    }
+
+    private static final int DEFAULT_TENSOR_ORDERING = -1;
 
     @Override
     public CudaHATKernelBuilder hatTensorCreateOp(HATTensorOp.TensorCreateOp tensorCreateOp) {
         // infer first parameter
         List<Value> operands = tensorCreateOp.operands();
-        Value first = operands.getFirst();
-        // The first operand  gives us the matrix order or accumulator
-        String matrixOrder = getMatrixOrder(first);
+
+        String matrixOrder = tensorOrderTable.get(DEFAULT_TENSOR_ORDERING);
+
+        if (operands.size() < 3) {
+            matrixOrder = TENSOR_ACC;
+        } else {
+            // Find the declaration value of the tensor
+            Value v = tensorCreateOp.result().uses().getFirst();
+            if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
+                Value tensorValue = tensorVarOp.result();
+                // Inspect the code-model to determine the ordering of matrices
+                int indexOrdering = getTensorOrder(tensorValue, tensorValue);
+                if (tensorOrderTable.containsKey(indexOrdering)) {
+                    matrixOrder = tensorOrderTable.get(indexOrdering);
+                }
+            }
+        }
 
         // Second parameters: analysis of the shape
         List<Integer> shape = new ArrayList<>();
-
-        Value second = operands.get(1);
-        if (second.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
+        Value shapeValue = operands.get(0);
+        if (shapeValue.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
             List<Value> shapeOperands = invokeOp.operands();
             for (Value shapeOperand : shapeOperands) {
                 if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
@@ -528,7 +569,7 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
                 }
             }
         } else {
-            throw new CUDACodeGenException("InvokeOp expected, but found: " + second.declaringElement().getClass());
+            throw new CUDACodeGenException("InvokeOp expected, but found: " + shapeValue.declaringElement().getClass());
         }
         if (shape.size() != 3) {
             throw new CUDACodeGenException("Shape must have three values");
@@ -536,7 +577,7 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
 
         // The third parameter is the type. It could be `half` or `float` as first implementation
         // This parameter is another constant with the type
-        Value classOperand = operands.get(2);
+        Value classOperand = operands.get(1);
         Object klass = null;
         if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
             klass = constantOp.value();
