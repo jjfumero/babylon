@@ -8,16 +8,9 @@ import optkl.IfaceValue;
 // Tensors are immutable
 public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implements IfaceValue {
 
-    public static final int UNDEFINED = -1;
-    public static final int ACC = 2;
-
     public static Shape shape(int dim1, int dim2, int dim3) {
         return new Shape(dim1, dim2, dim3);
     }
-
-//    public static Tensor create(Shape shape, Class<?> klass, final Access tensorAccess) {
-//        return new Tensor(shape, klass, tensorAccess);
-//    }
 
     public static Tensor create(Shape shape, final Access tensorAccess) {
         return new Tensor(shape, null, tensorAccess);
@@ -34,10 +27,6 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
 
     public static void mma(Tensor result, Tensor tensorA, Tensor tensorB, Tensor acc) {
     }
-
-//    public static Tensor load(F16Array matrix, int i, int j, int ld) {
-//        return null;
-//    }
 
     public static Tensor loadF16(F16Array matrix, int i, int j, int ld) {
         return null;
