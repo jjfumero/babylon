@@ -556,6 +556,33 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         return varianceName;
     }
 
+    public Value findShape(Value tensorVar, Value v) {
+        return v instanceof Op.Result r ? findShape(tensorVar, r.op()) : null;
+    }
+
+    public Value findShape(Value tensorVar, Op op) {
+        Value shape = null;
+        switch (op) {
+            case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
+                Value tensorToStore = storeLoadOp.operands().getFirst();
+                if (tensorToStore.equals(tensorVar)) {
+                    Value value = storeLoadOp.operands().get(1);
+                    if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
+                        return tensorLoadOp.operands().getLast();
+                    }
+                }
+            }
+            default -> {
+                for (Op.Result use : op.result().uses()) {
+                    if ((shape = findShape(tensorVar, use)) != null) {
+                        return shape;
+                    }
+                }
+            }
+        }
+        return shape;
+    }
+
     private static final Map<Integer, String> tensorOrderTable = new HashMap<>();
     private static final int DEFAULT_TENSOR_ORDERING = -1;
     static {
@@ -578,18 +605,14 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
 
         String matrixOrder = tensorOrderTable.get(DEFAULT_TENSOR_ORDERING);
 
-        // inspect last parameter
-        Value classOperand = operands.get(1);
-        Object klass = null;
-        if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
-            klass = constantOp.value();
-        }
-
-        if (klass != null) {
+        Value v = tensorCreateOp.result().uses().getFirst();
+        int baseIndex = 0;
+        if (operands.size() > 1) {
+            // we know it is an accumulator
+            baseIndex++;
             matrixOrder = TENSOR_ACC;
         } else {
             // Find the declaration value of the tensor
-            Value v = tensorCreateOp.result().uses().getFirst();
             if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
                 Value tensorValue = tensorVarOp.result();
                 // Inspect the code-model to determine the ordering of matrices
@@ -600,9 +623,20 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             }
         }
 
-        // Second parameters: analysis of the shape
+
         List<Integer> shape = new ArrayList<>();
-        Value shapeValue = operands.get(0);
+        Value shapeValue;
+        if (operands.size() > 1) {
+            // First parameters: analysis of the shape for the accumulator
+            shapeValue = operands.getFirst();
+        } else {
+            // otherwise, we have to inspect the shape from the TensorLoadOp
+            if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
+                shapeValue = findShape(tensorVarOp.result(), tensorVarOp.result());
+            } else {
+                throw new CUDACodeGenException("Value not supported");
+            }
+        }
         if (shapeValue.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
             List<Value> shapeOperands = invokeOp.operands();
             for (Value shapeOperand : shapeOperands) {
@@ -620,6 +654,12 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         }
 
         String type = null;
+        // inspect the first parameter
+        Value classOperand = operands.get(0 + baseIndex);
+        Object klass = null;
+        if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
+            klass = constantOp.value();
+        }
         if (klass != null) {
             switch (klass) {
                 case ClassType classType when classType.toClassName().equals(F16.class.getCanonicalName()) -> type = "half";
@@ -628,7 +668,6 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             }
         } else {
             // get the type by analyzing the load call
-            Value v = tensorCreateOp.result().uses().getFirst();
             if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
                 Value tensorVarValue = tensorVarOp.result();
                 String loadVariance = findLoadVariance(tensorVarValue, tensorVarOp);

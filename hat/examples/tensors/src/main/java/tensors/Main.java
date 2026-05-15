@@ -77,8 +77,8 @@ public class Main {
         final int ldb = size;
         final int ldc = size;
 
-        Tensor tensorA = Tensor.create(Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
-        Tensor tensorB = Tensor.create(Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
+        Tensor tensorA = Tensor.create(Tensor.ofColumnMajor());
+        Tensor tensorB = Tensor.create(Tensor.ofColumnMajor());
         Tensor acc = Tensor.create(Tensor.shape(16, 16, 16), float.class);
 
         Tensor.fill(acc, 0.0f);
@@ -92,8 +92,8 @@ public class Main {
 
             if (aRow < lda && aCol < lda && bRow < ldb && bCol < ldb) {
 
-                tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda);
-                tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb);
+                tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16));
+                tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16));
 
                 // acc = tensorA * tensorB + acc
                 Tensor.mma(acc, tensorA, tensorB, acc);
