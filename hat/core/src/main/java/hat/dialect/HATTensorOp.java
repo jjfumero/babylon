@@ -240,15 +240,18 @@ public abstract sealed class HATTensorOp extends HATOp {
     public static final class TensorLoadOp extends HATTensorOp implements Precedence.LoadOrConv {
 
         private final CodeType codeType;
+        private final String loadVariance;
 
-        public TensorLoadOp(CodeType codeType, List<Value> operands) {
+        public TensorLoadOp(CodeType codeType, String loadVariance,List<Value> operands) {
             super(operands);
             this.codeType = codeType;
+            this.loadVariance = loadVariance;
         }
 
         public TensorLoadOp(TensorLoadOp op, CodeContext copyContext) {
             super(op, copyContext);
             this.codeType = op.codeType;
+            this.loadVariance = op.loadVariance;
         }
 
         @Override
@@ -264,6 +267,10 @@ public abstract sealed class HATTensorOp extends HATOp {
         @Override
         public String externalizeOpName() {
             return "hat.dialect.TensorLoadOp";
+        }
+
+        public String getLoadVariance() {
+            return this.loadVariance;
         }
     }
 

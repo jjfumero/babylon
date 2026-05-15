@@ -316,12 +316,20 @@ public sealed interface OpHelper<T extends Op> extends LookupCarrier
             return nameInSet(Set.of(names));
         }
 
+        default boolean nameStartsWith(String... names) {
+            return isPrefixInSet(Set.of(names));
+        }
+
         default boolean named(Predicate<String> predicate) {
             return predicate.test(name());
         }
 
         default boolean nameInSet(Set<String> set) {
             return set.contains(name());
+        }
+
+        default boolean isPrefixInSet(Set<String> set) {
+            return set.stream().anyMatch(name -> name().startsWith(name));
         }
     }
 

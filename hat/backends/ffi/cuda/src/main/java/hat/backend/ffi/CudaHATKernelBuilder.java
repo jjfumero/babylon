@@ -494,6 +494,10 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
     private static final String TENSOR_MATRIX_B = "matrix_b";
     private static final String TENSOR_ACC = "accumulator";
 
+    private int getTensorOrder(Value tensorValue) {
+        return getTensorOrder(tensorValue, tensorValue);
+    }
+
     private int getTensorOrder(Value tensorValue, Value v) {
         return v instanceof Op.Result r ? getTensorOrder(tensorValue, r.op()) : -1;
     }
@@ -525,14 +529,47 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         return operandIndex;
     }
 
+    public String findLoadVariance(Value tensorVar, Value v) {
+        return v instanceof Op.Result r ? findLoadVariance(tensorVar, r.op()) : null;
+    }
+
+    public String findLoadVariance(Value tensorVar, Op op) {
+        String varianceName = null;
+        switch (op) {
+            case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
+                Value tensorToStore = storeLoadOp.operands().getFirst();
+                if (tensorToStore.equals(tensorVar)) {
+                    Value value = storeLoadOp.operands().get(1);
+                    if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
+                        return tensorLoadOp.getLoadVariance();
+                    }
+                }
+            }
+            default -> {
+                for (Op.Result use : op.result().uses()) {
+                    if ((varianceName = findLoadVariance(tensorVar, use)) != null) {
+                        return varianceName;
+                    }
+                }
+            }
+        }
+        return varianceName;
+    }
+
     private static final Map<Integer, String> tensorOrderTable = new HashMap<>();
+    private static final int DEFAULT_TENSOR_ORDERING = -1;
     static {
         tensorOrderTable.put(1, TENSOR_MATRIX_A);
         tensorOrderTable.put(2, TENSOR_MATRIX_B);
         tensorOrderTable.put(-1, TENSOR_MATRIX_A); // We set one by default
     }
 
-    private static final int DEFAULT_TENSOR_ORDERING = -1;
+    private static final Map<String, String> tensorTypeTable = new HashMap<>();
+    static {
+        tensorTypeTable.put("loadF16", "half");
+        tensorTypeTable.put("load",    "float");
+        tensorTypeTable.put("loadF32", "float");
+    }
 
     @Override
     public CudaHATKernelBuilder hatTensorCreateOp(HATTensorOp.TensorCreateOp tensorCreateOp) {
@@ -541,7 +578,14 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
 
         String matrixOrder = tensorOrderTable.get(DEFAULT_TENSOR_ORDERING);
 
-        if (operands.size() < 3) {
+        // inspect last parameter
+        Value classOperand = operands.get(1);
+        Object klass = null;
+        if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
+            klass = constantOp.value();
+        }
+
+        if (klass != null) {
             matrixOrder = TENSOR_ACC;
         } else {
             // Find the declaration value of the tensor
@@ -549,7 +593,7 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
                 Value tensorValue = tensorVarOp.result();
                 // Inspect the code-model to determine the ordering of matrices
-                int indexOrdering = getTensorOrder(tensorValue, tensorValue);
+                int indexOrdering = getTensorOrder(tensorValue);
                 if (tensorOrderTable.containsKey(indexOrdering)) {
                     matrixOrder = tensorOrderTable.get(indexOrdering);
                 }
@@ -575,19 +619,25 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             throw new CUDACodeGenException("Shape must have three values");
         }
 
-        // The third parameter is the type. It could be `half` or `float` as first implementation
-        // This parameter is another constant with the type
-        Value classOperand = operands.get(1);
-        Object klass = null;
-        if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
-            klass = constantOp.value();
-        }
+        String type = null;
+        if (klass != null) {
+            switch (klass) {
+                case ClassType classType when classType.toClassName().equals(F16.class.getCanonicalName()) -> type = "half";
+                case PrimitiveType primitiveType when primitiveType.equals(PrimitiveType.FLOAT) -> type = "float";
+                default -> throw new CUDACodeGenException("Type class not supported for Tensors: " + klass);
+            }
+        } else {
+            // get the type by analyzing the load call
+            Value v = tensorCreateOp.result().uses().getFirst();
+            if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
+                Value tensorVarValue = tensorVarOp.result();
+                String loadVariance = findLoadVariance(tensorVarValue, tensorVarOp);
+                type = tensorTypeTable.getOrDefault(loadVariance, null);
+                if (type == null) {
+                    throw new CUDACodeGenException("Load Type not supported:" + type);
+                }
+            }
 
-        String type = "";
-        if (klass instanceof ClassType classType && classType.toClassName().equals(F16.class.getCanonicalName())) {
-            type = "half";
-        } else if (klass instanceof PrimitiveType primitiveType && primitiveType.equals(PrimitiveType.FLOAT)) {
-            type = "float";
         }
 
         Value access = operands.getLast();

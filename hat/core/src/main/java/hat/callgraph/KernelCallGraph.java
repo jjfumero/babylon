@@ -115,10 +115,9 @@ public class KernelCallGraph implements LookupCarrier {
         this.usesBarrier = OpHelper.Invoke.stream(lookup(), inlinedEntryPoint)
                 .anyMatch(invoke -> invoke.refIs(KernelContext.class) && invoke.named("barrier"));
         this.useTensors = OpHelper.Invoke.stream(lookup(), inlinedEntryPoint)
-                .anyMatch(invoke -> invoke.refIs(Tensor.class) && invoke.named("load"));
+                .anyMatch(invoke -> invoke.refIs(Tensor.class) && invoke.nameStartsWith("load"));
         this.accessedKernelContextFields = new HashSet<>(OpHelper.FieldAccess.stream(lookup(), inlinedEntryPoint)
-                .filter(fieldAccess -> fieldAccess.refType(KernelContext.class)).map(OpHelper.FieldAccess::name).toList()
-        );
+                .filter(fieldAccess -> fieldAccess.refType(KernelContext.class)).map(OpHelper.FieldAccess::name).toList());
         this.accessedTypes = inlinedEntryPoint.elements()
                 .filter(ce -> ce instanceof Op).map(ce -> ((Op) ce).resultType())
                 .collect(Collectors.toSet());

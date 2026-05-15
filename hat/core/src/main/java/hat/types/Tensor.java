@@ -15,22 +15,31 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
         return new Shape(dim1, dim2, dim3);
     }
 
-    public static Tensor create(Shape shape, Class<?> klass, final Access tensorAccess) {
-        return new Tensor(shape, klass, tensorAccess);
+//    public static Tensor create(Shape shape, Class<?> klass, final Access tensorAccess) {
+//        return new Tensor(shape, klass, tensorAccess);
+//    }
+
+    public static Tensor create(Shape shape, final Access tensorAccess) {
+        return new Tensor(shape, null, tensorAccess);
     }
 
     public static Tensor create(Shape shape, Class<?> klass) {
         return new Tensor(shape, klass, null);
     }
 
-    // Do we do a = fill(a, v)? or void fill(a, v)?
+    // What do we do? a = fill(a, v)? or void fill(a, v)?
+    // If we say tensors are immutable, we should return a value
     public static void fill(Tensor acc, float value) {
     }
 
     public static void mma(Tensor result, Tensor tensorA, Tensor tensorB, Tensor acc) {
     }
 
-    public static Tensor load(F16Array matrix, int i, int j, int ld) {
+//    public static Tensor load(F16Array matrix, int i, int j, int ld) {
+//        return null;
+//    }
+
+    public static Tensor loadF16(F16Array matrix, int i, int j, int ld) {
         return null;
     }
 

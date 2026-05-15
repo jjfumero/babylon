@@ -40,7 +40,6 @@ import jdk.incubator.code.dialect.java.JavaOp;
 import jdk.incubator.code.dialect.java.PrimitiveType;
 import optkl.codebuilders.ScopedCodeBuilderContext;
 import jdk.incubator.code.Op;
-import optkl.exceptions.CodeGenException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -49,8 +48,19 @@ import java.util.Random;
 
 public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelBuilder> {
 
+    @FunctionalInterface
+    private interface CodeGenAction {
+        void apply() throws OpenCLCodeGenException;
+    }
+
+    private final Map<String, CodeGenAction> tensorTypeTable;
+
     protected OpenCLHATKernelBuilder(KernelCallGraph kernelCallGraph, ScopedCodeBuilderContext scopedCodeBuilderContext) {
         super(kernelCallGraph,scopedCodeBuilderContext);
+        tensorTypeTable = new HashMap<>();
+        tensorTypeTable.put("loadF16", this::f16Type);
+        tensorTypeTable.put("load", this::f32Type);
+        tensorTypeTable.put("loadF32", this::f32Type);
     }
 
     @Override
@@ -268,8 +278,36 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         return self();
     }
 
+    public String findLoadVariance(Value tensorVar, Value v) {
+        return v instanceof Op.Result r ? findLoadVariance(tensorVar, r.op()) : null;
+    }
+
+    public String findLoadVariance(Value tensorVar, Op op) {
+        String varianceName = null;
+        switch (op) {
+            case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
+                Value tensorToStore = storeLoadOp.operands().getFirst();
+                if (tensorToStore.equals(tensorVar)) {
+                    Value value = storeLoadOp.operands().get(1);
+                    if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
+                        return tensorLoadOp.getLoadVariance();
+                    }
+                }
+            }
+            default -> {
+                for (Op.Result use : op.result().uses()) {
+                    if ((varianceName = findLoadVariance(tensorVar, use)) != null) {
+                        return varianceName;
+                    }
+                }
+            }
+        }
+        return varianceName;
+    }
+
     @Override
     public OpenCLHATKernelBuilder hatTensorCreateOp(HATTensorOp.TensorCreateOp tensorCreateOp) {
+
         List<Value> operands = tensorCreateOp.operands();
 
         // Second parameters: analysis of the shape
@@ -285,7 +323,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
             }
         }
 
-        // The third parameter is the type. It could be `half` or `float` as first implementation
+        // The second parameter is the type. It could be `half` or `float` as first implementation
         // This parameter is another constant with the type
         Value classOperand = operands.get(1);
         Object klass = null;
@@ -298,8 +336,9 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         if (tensorVarValue.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
             varTensorName = tensorVarOp.varName();
         }
-        final int size = shape[0] * shape[1];
-        if (tensorCreateOp.operands().size() > 2) {
+        final int sizeToAllocate = shape[0] * shape[1];
+
+        if (klass == null) {
             // Share memory only for the input tiles (tensors)
             // The accumulator is stored in private memory
             HAT_LOCAL_MEM().sp();
@@ -308,9 +347,21 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         switch (klass) {
             case ClassType classType when classType.toClassName().equals(F16.class.getCanonicalName()) -> f16Type();
             case PrimitiveType primitiveType when primitiveType.equals(PrimitiveType.FLOAT) -> type("float");
-            case null, default -> throw new OpenCLCodeGenException("[ERROR] Codegen. Type " + klass + " not expected");
+            case null, default -> {
+                // When we derive the type for tensors that are not accumulators
+                Value v = tensorCreateOp.result().uses().getFirst();
+                if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
+                    Value tensorVar = tensorVarOp.result();
+                    String loadVariance = findLoadVariance(tensorVar, tensorVarOp);
+                    CodeGenAction type = tensorTypeTable.getOrDefault(loadVariance, null);
+                    if (type == null) {
+                        throw new OpenCLCodeGenException("Load Type not supported:" + type);
+                    }
+                    type.apply();
+                }
+            }
         }
-        sp().varName(varTensorName).sbrace(_-> constant(Integer.toString(size)));
+        sp().varName(varTensorName).sbrace(_-> constant(Integer.toString(sizeToAllocate)));
         return self();
     }
 
@@ -376,8 +427,8 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
     private boolean isColumnMajorFromVarOp(HATTensorOp.TensorVarOp tensorVarOp) {
         Value tensorCreateValueOp = tensorVarOp.operands().getFirst();
         if (tensorCreateValueOp.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
-            // Parameter 3 defines the access layout
-            Value valueLayout = tensorCreateOp.operands().get(2);
+            // Parameter 2 defines the access layout
+            Value valueLayout = tensorCreateOp.operands().get(1);
             return isColumnMajor(valueLayout);
         }
         return false;
@@ -773,7 +824,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
      * <p>
      * <code>
      *  for (int m = 0; m < WMMA_M; m++) {
-     *  `int rowC = cRow + m;
+     *   int rowC = cRow + m;
      *   for (int n = 0; n < WMMA_N; n++) {
      *      int colC = cCol + n;
      *      int idxC = (cRow) + (cCol) * ldc;

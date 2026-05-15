@@ -111,7 +111,7 @@ public record HATTensorsPhase() implements HATPhase {
                 case CoreOp.VarAccessOp.VarStoreOp storeOp ->
                         replaceOp(blockBuilder, storeOp, new TensorStoreLoadOp(storeOp.resultType(), operands));
                 case JavaOp.InvokeOp invokeOp ->
-                        replaceOp(blockBuilder, invokeOp, new TensorLoadOp(invokeOp.resultType(), operands));
+                        replaceOp(blockBuilder, invokeOp, new TensorLoadOp(invokeOp.resultType(), invokeOp.invokeReference().name(), operands));
                 default -> blockBuilder.op(op);
             }
         }
@@ -185,7 +185,7 @@ public record HATTensorsPhase() implements HATPhase {
         OpHelper.Invoke.stream(lookup, funcOp)
                 .filter(invoke -> !invoke.returnsVoid())
                 .filter(invoke -> invoke.refIs(Tensor.class))
-                .filter(invoke -> invoke.name().equals("load"))
+                .filter(invoke -> invoke.name().equals("load") || invoke.name().equals("loadF16"))
                 .forEach(invoke -> {
                     opsToProcess.add(invoke.op());
                     invoke.op().result().uses().stream()
