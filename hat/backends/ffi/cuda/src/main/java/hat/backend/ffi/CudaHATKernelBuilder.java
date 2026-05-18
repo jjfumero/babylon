@@ -556,6 +556,33 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         return varianceName;
     }
 
+    public Value findAccessLayout(Value tensorVar, Value v) {
+        return v instanceof Op.Result r ? findAccessLayout(tensorVar, r.op()) : null;
+    }
+
+    public Value findAccessLayout(Value tensorVar, Op op) {
+        Value valueLayout = null;
+        switch (op) {
+            case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
+                Value tensorToStore = storeLoadOp.operands().getFirst();
+                if (tensorToStore.equals(tensorVar)) {
+                    Value value = storeLoadOp.operands().get(1);
+                    if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
+                        return tensorLoadOp.operands().getLast();
+                    }
+                }
+            }
+            default -> {
+                for (Op.Result use : op.result().uses()) {
+                    if ((valueLayout = findAccessLayout(tensorVar, use)) != null) {
+                        return valueLayout;
+                    }
+                }
+            }
+        }
+        return valueLayout;
+    }
+
     public Value findShape(Value tensorVar, Value v) {
         return v instanceof Op.Result r ? findShape(tensorVar, r.op()) : null;
     }
@@ -568,7 +595,7 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
                 if (tensorToStore.equals(tensorVar)) {
                     Value value = storeLoadOp.operands().get(1);
                     if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
-                        return tensorLoadOp.operands().getLast();
+                        return tensorLoadOp.operands().get(tensorLoadOp.operands().size()-2);
                     }
                 }
             }
@@ -598,45 +625,8 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         tensorTypeTable.put("loadF32", "float");
     }
 
-    @Override
-    public CudaHATKernelBuilder hatTensorCreateOp(HATTensorOp.TensorCreateOp tensorCreateOp) {
-        // infer first parameter
-        List<Value> operands = tensorCreateOp.operands();
-
-        String matrixOrder = tensorOrderTable.get(DEFAULT_TENSOR_ORDERING);
-
-        Value v = tensorCreateOp.result().uses().getFirst();
-        int baseIndex = 0;
-        if (operands.size() > 1) {
-            // we know it is an accumulator
-            baseIndex++;
-            matrixOrder = TENSOR_ACC;
-        } else {
-            // Find the declaration value of the tensor
-            if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
-                Value tensorValue = tensorVarOp.result();
-                // Inspect the code-model to determine the ordering of matrices
-                int indexOrdering = getTensorOrder(tensorValue);
-                if (tensorOrderTable.containsKey(indexOrdering)) {
-                    matrixOrder = tensorOrderTable.get(indexOrdering);
-                }
-            }
-        }
-
-
+    private List<Integer> obtainShapeTensor(Value shapeValue) {
         List<Integer> shape = new ArrayList<>();
-        Value shapeValue;
-        if (operands.size() > 1) {
-            // First parameters: analysis of the shape for the accumulator
-            shapeValue = operands.getFirst();
-        } else {
-            // otherwise, we have to inspect the shape from the TensorLoadOp
-            if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
-                shapeValue = findShape(tensorVarOp.result(), tensorVarOp.result());
-            } else {
-                throw new CUDACodeGenException("Value not supported");
-            }
-        }
         if (shapeValue.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
             List<Value> shapeOperands = invokeOp.operands();
             for (Value shapeOperand : shapeOperands) {
@@ -652,35 +642,81 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         if (shape.size() != 3) {
             throw new CUDACodeGenException("Shape must have three values");
         }
+        return shape;
+    }
 
-        String type = null;
-        // inspect the first parameter
-        Value classOperand = operands.get(0 + baseIndex);
+    private CudaHATKernelBuilder generateTensorAccumulateCreate(HATTensorOp.TensorCreateOp tensorCreateOp) {
+        // tensor declaration for the accumulator
+        Value shapeValue = tensorCreateOp.operands().getFirst();
+        List<Integer> shape = obtainShapeTensor(shapeValue);
+        Value classOperand = tensorCreateOp.operands().get(1);
         Object klass = null;
         if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
             klass = constantOp.value();
         }
+        String tensorType = null;
         if (klass != null) {
             switch (klass) {
-                case ClassType classType when classType.toClassName().equals(F16.class.getCanonicalName()) -> type = "half";
-                case PrimitiveType primitiveType when primitiveType.equals(PrimitiveType.FLOAT) -> type = "float";
+                case ClassType classType when classType.toClassName().equals(F16.class.getCanonicalName()) ->
+                        tensorType = "half";
+                case PrimitiveType primitiveType when primitiveType.equals(PrimitiveType.FLOAT) -> tensorType = "float";
                 default -> throw new CUDACodeGenException("Type class not supported for Tensors: " + klass);
             }
-        } else {
-            // get the type by analyzing the load call
-            if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
-                Value tensorVarValue = tensorVarOp.result();
-                String loadVariance = findLoadVariance(tensorVarValue, tensorVarOp);
-                type = tensorTypeTable.getOrDefault(loadVariance, null);
-                if (type == null) {
-                    throw new CUDACodeGenException("Load Type not supported:" + type);
-                }
+        }
+        Value valueAccessLayout = tensorCreateOp.operands().getLast();
+        return generateCreateTensor(shape, TENSOR_ACC, tensorType, valueAccessLayout);
+    }
+
+    private CudaHATKernelBuilder generateTensorCreate(HATTensorOp.TensorCreateOp tensorCreateOp) {
+        Value v = tensorCreateOp.result().uses().getFirst();
+
+        // Find the declaration value of the tensor
+        String matrixOrder = tensorOrderTable.get(DEFAULT_TENSOR_ORDERING);
+        Value shapeValue;
+        String type;
+        Value valueAccessLayout;
+        List<Integer> shape;
+        // otherwise, we have to inspect the shape from the TensorLoadOp
+        if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
+            Value tensorValue = tensorVarOp.result();
+            // Inspect the code-model to reach the MMA op and determine the ordering of matrices
+            int indexOrdering = getTensorOrder(tensorValue);
+            if (tensorOrderTable.containsKey(indexOrdering)) {
+                matrixOrder = tensorOrderTable.get(indexOrdering);
             }
 
+            shapeValue = findShape(tensorVarOp.result(), tensorVarOp.result());
+            shape = obtainShapeTensor(shapeValue);
+            String loadVariance = findLoadVariance(tensorValue, tensorVarOp);
+            type = tensorTypeTable.getOrDefault(loadVariance, null);
+            valueAccessLayout = findAccessLayout(tensorValue, tensorVarOp);
+
+            if (shape.size() != 3) {
+                throw new CUDACodeGenException("Tensor Shape must have 3 values" + type);
+            }
+            if (type == null) {
+                throw new CUDACodeGenException("Load Type not supported:" + type);
+            }
+            if (valueAccessLayout == null) {
+                throw new CUDACodeGenException("Access Layout is null:");
+            }
+
+        } else {
+            throw new CUDACodeGenException("Value not supported");
         }
 
-        Value access = operands.getLast();
-        return generateCreateTensor(shape, matrixOrder, type, access);
+        return generateCreateTensor(shape, matrixOrder, type, valueAccessLayout);
+    }
+
+    @Override
+    public CudaHATKernelBuilder hatTensorCreateOp(HATTensorOp.TensorCreateOp tensorCreateOp) {
+        if (tensorCreateOp.operands().isEmpty()) {
+            // this corresponds to a tensor declaration for the input data
+            return generateTensorCreate(tensorCreateOp);
+        } else {
+            // generate accumulate for the tensors
+            return generateTensorAccumulateCreate(tensorCreateOp);
+        }
     }
 
     @Override
@@ -767,11 +803,8 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
 
         boolean isColumnMajor = true;
         if (tensorVarOp != null) {
-            Value value = tensorVarOp.operands().getFirst();
-            if (value.declaringElement() instanceof HATTensorOp.TensorCreateOp createOp) {
-                Value tensorLayout = createOp.operands().getLast();
-                isColumnMajor = isColumnMajor(tensorLayout);
-            }
+            Value value = tensorLoadOp.operands().getLast();
+            isColumnMajor = isColumnMajor(value);
         }
         return generateLoadTensor(tensorLoadOp, isColumnMajor, tensorName);
     }

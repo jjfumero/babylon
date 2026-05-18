@@ -40,8 +40,8 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
         return new Tensor(shape, null, tensorAccess);
     }
 
-    public static Tensor create(final Access tensorAccess) {
-        return new Tensor(null, null, tensorAccess);
+    public static Tensor create() {
+        return new Tensor(null, null, null);
     }
 
     public static Tensor create(Shape shape, Class<?> klass) {
@@ -56,11 +56,11 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
     public static void mma(Tensor result, Tensor tensorA, Tensor tensorB, Tensor acc) {
     }
 
-    public static Tensor loadF16(F16Array matrix, int i, int j, int ld) {
+    public static Tensor loadF16(F16Array matrix, int i, int j, int ld, Shape shape) {
         return null;
     }
 
-    public static Tensor loadF16(F16Array matrix, int i, int j, int ld, Shape shape) {
+    public static Tensor loadF16(F16Array matrix, int i, int j, int ld, Shape shape, final Access tensorAccess) {
         return null;
     }
 

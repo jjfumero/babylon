@@ -317,7 +317,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
                 if (tensorToStore.equals(tensorVar)) {
                     Value value = storeLoadOp.operands().get(1);
                     if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
-                        return tensorLoadOp.operands().getLast();
+                        return tensorLoadOp.operands().get(4); // SHAPE
                     }
                 }
             }
@@ -332,54 +332,13 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         return shape;
     }
 
-    @Override
-    public OpenCLHATKernelBuilder hatTensorCreateOp(HATTensorOp.TensorCreateOp tensorCreateOp) {
-
-        List<Value> operands = tensorCreateOp.operands();
-
-        // analysis of the shape
-        Value v = tensorCreateOp.result().uses().getFirst();
-        int[] shape = new int[3];
-        Value shapeValue = operands.getFirst();
-        if (operands.size() < 2) {
-            // otherwise, we have to inspect the shape from the TensorLoadOp
-            if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
-                shapeValue = findShape(tensorVarOp.result(), tensorVarOp.result());
-            } else {
-                throw new OpenCLCodeGenException("Value not supported");
-            }
-        }
-
-        if (shapeValue.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
-            List<Value> shapeOperands = invokeOp.operands();
-            for (int i = 0; i < shapeOperands.size(); i++) {
-                Value shapeOperand = shapeOperands.get(i);
-                if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
-                    shape[i] = (int) constantOp.value();
-                }
-            }
-        }
-
-        // The second parameter is the type. It could be `half` or `float` as first implementation
-        // This parameter is another constant with the type
-        Value classOperand = operands.getLast();
-        Object klass = null;
-        if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
-            klass = constantOp.value();
-        }
-
-        String varTensorName = null;
-        if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
-            varTensorName = tensorVarOp.varName();
-        }
-        final int sizeToAllocate = shape[0] * shape[1];
-
+    private OpenCLHATKernelBuilder generateHatTensorCreate(int[] shape, Object klass, String varTensorName, Value v) {
         if (klass == null) {
             // Share memory only for the input tiles (tensors)
             // The accumulator is stored in private memory
-            HAT_LOCAL_MEM().sp();
+            //HAT_LOCAL_MEM().sp();
         }
-
+        final int sizeToAllocate = shape[0] * shape[1];
         switch (klass) {
             case ClassType classType when classType.toClassName().equals(F16.class.getCanonicalName()) -> f16Type();
             case PrimitiveType primitiveType when primitiveType.equals(PrimitiveType.FLOAT) -> type("float");
@@ -396,8 +355,61 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
                 }
             }
         }
-        sp().varName(varTensorName).sbrace(_-> constant(Integer.toString(sizeToAllocate)));
-        return self();
+        return sp().varName(varTensorName).sbrace(_-> constant(Integer.toString(sizeToAllocate)));
+    }
+
+    private int[] getShape(Value shapeValue) {
+        int[] shape = new int[3];
+        if (shapeValue.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
+            List<Value> shapeOperands = invokeOp.operands();
+            for (int i = 0; i < shapeOperands.size(); i++) {
+                Value shapeOperand = shapeOperands.get(i);
+                if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
+                    shape[i] = (int) constantOp.value();
+                }
+            }
+        }
+        return shape;
+    }
+
+    private OpenCLHATKernelBuilder createTensor(HATTensorOp.TensorCreateOp tensorCreateOp) {
+        Value v = tensorCreateOp.result().uses().getFirst();
+        Value shapeValue;
+        String varTensorName;
+        if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
+            shapeValue = findShape(tensorVarOp.result(), tensorVarOp.result());
+            varTensorName = tensorVarOp.varName();
+        } else {
+            throw new OpenCLCodeGenException("Value not supported");
+        }
+        int[] shape = getShape(shapeValue);
+        return generateHatTensorCreate(shape, null, varTensorName, v);
+    }
+
+    private OpenCLHATKernelBuilder createTensorAccumulator(HATTensorOp.TensorCreateOp tensorCreateOp) {
+        Value v = tensorCreateOp.result().uses().getFirst();
+        Value shapeValue = tensorCreateOp.operands().getFirst();
+        int[] shape = getShape(shapeValue);
+        Object klass = null;
+        Value classOperand = tensorCreateOp.operands().getLast();
+        if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
+            klass = constantOp.value();
+        }
+        String varTensorName = null;
+        if (v.declaringElement() instanceof HATTensorOp.TensorVarOp tensorVarOp) {
+            varTensorName = tensorVarOp.varName();
+        }
+        return generateHatTensorCreate(shape, klass, varTensorName, v);
+    }
+
+    @Override
+    public OpenCLHATKernelBuilder hatTensorCreateOp(HATTensorOp.TensorCreateOp tensorCreateOp) {
+        List<Value> operands = tensorCreateOp.operands();
+        if (operands.isEmpty()) {
+            return createTensor(tensorCreateOp);
+        } else {
+           return createTensorAccumulator(tensorCreateOp);
+        }
     }
 
     static HATTensorOp.TensorVarOp findTensorVarOp(Value varLoadOp) {
@@ -461,16 +473,6 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
             return getShapeFromValueShape(valueShape);
         }
         return new int[]{};
-    }
-
-    private boolean isColumnMajorFromVarOp(HATTensorOp.TensorVarOp tensorVarOp) {
-        Value tensorCreateValueOp = tensorVarOp.operands().getFirst();
-        if (tensorCreateValueOp.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
-            // Parameter 0 defines the access layout
-            Value valueLayout = tensorCreateOp.operands().getFirst();
-            return isColumnMajor(valueLayout);
-        }
-        return false;
     }
 
     private String generateVariableName(String prefix) {
@@ -845,15 +847,17 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         var leadingDimension = operands.get(3);
         HATTensorOp.TensorVarOp tensorVarOp = findTensorVarOp(tensorLoadOp);
         int[] shape;
-        boolean isColumnMajor;
         if (tensorVarOp != null) {
             shape = getShapeFromValueShape(operands.get(4));
-            isColumnMajor = isColumnMajorFromVarOp(tensorVarOp);
         } else {
             throw new OpenCLCodeGenException("[Error][CodeGen] Expected to see an instance of tensorVarOp but `null` found");
         }
+        Value valueLayout = operands.get(5);
+        boolean isColumnMajor = isColumnMajor(valueLayout);
+
         generateTensorLoad(shape, iIndexValue, jIndexValue, isColumnMajor, leadingDimension, ptrValue, tensorVarOp);
         HAT_BARRIER();
+
         return self();
     }
 
