@@ -161,8 +161,13 @@ public record HATTensorsPhase() implements HATPhase {
 
     private CoreOp.FuncOp createTensorsToRelocate(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp) {
 
+        // 1. Obtain the last Op before any control flow. We need to find a suitable location in basic block 0
+        // to insert the declaration of tensors coming from the Load operations
         ControlFlowLastOp controlFlowLastOp = obtainLastOpBeforeControlFlow(funcOp);
 
+        // 2. Analyze the code model to obtain:
+        // 2.1: A set for all nodes to be processed (load-invoke, and the varOp associated with it)
+        // 2.2: A map that relates the marker position (suitable last op) with a list of pending declaration to perform
         Map<Op, List<DeclTensorData>> map  = new HashMap<>();
         Op marker = (Op) controlFlowLastOp.previous;
         Set<Op> opsToProcess = new HashSet<>();
@@ -183,13 +188,19 @@ public record HATTensorsPhase() implements HATPhase {
                             });
                 });
 
-
+        // 3. Transform the model to insert:
+        // 3.1: All tensor declaration from the marker.
+        // 3.2 The load-invoke keeps intact since it will be processed in another phase
+        // 3.3 Replace the VarOp declaration associated with a load with a TensorStoreLoadOp
+        // 3.4 Replace the reference of subsequent VarLoapOp with the new declaration
         Map<CoreOp.VarOp, Value> mapValueTensor = new HashMap<>();
         Map<Op, Value> mapUsages = new HashMap<>();
         funcOp = funcOp.transform((blockBuilder, op) -> {
             if (!opsToProcess.contains(op)) {
               blockBuilder.op(op);
             } else if (map.containsKey(op)) {
+                // In this block, we insert all pending tensor declaration, starting with the marker.
+
                 List<DeclTensorData> declTensorList = map.get(marker);
 
                 // Insert the marker
@@ -197,21 +208,31 @@ public record HATTensorsPhase() implements HATPhase {
 
                 // And add the missing declarations
                 for (DeclTensorData c : declTensorList) {
-                    // Adding new nodes into the tree
+                    // Add a TensorCreateOp
                     JavaOp.InvokeOp declInvoke = c.invokeOp;
                     CoreOp.VarOp declVar = c.varOp;
                     TensorCreateOp tensorCreateOp = new TensorCreateOp(declInvoke.resultType(), blockBuilder.context().getValues(List.of()));
                     Op.Result op1 = blockBuilder.op(tensorCreateOp);
 
+                    // Add a TensorVarOp associated with teh TensorCreateOp
                     List<Value> operands = List.of(op1);
                     TensorVarOp tensorVarOp = new TensorVarOp(declVar.varName(), declVar.resultType(), operands);
                     Op.Result op2 = blockBuilder.op(tensorVarOp);
+
+                    // Include in a new HashMap the new tensorVarOp to be propagated for the Stores and VarLoadOps.
                     mapValueTensor.put(declVar, op2);
+
                     blockBuilder.context().mapValue(declInvoke.result(), op2);
                 }
             } else if (op instanceof JavaOp.InvokeOp invokeOp) {
+                // The Load/LoadF16 is propagated
                 blockBuilder.op(invokeOp);
+
             } else if (op instanceof CoreOp.VarOp varOp) {
+
+                // Replace the VarOp with a TensorStoreLoadOp using the reference of the tensorVarOp
+                // declared in a previous block (block 0)
+
                 Value tensorVarOp = mapValueTensor.get(varOp);
 
                 // Update the usages
@@ -227,7 +248,6 @@ public record HATTensorsPhase() implements HATPhase {
 
                 Op.Result storeResult = blockBuilder.op(storeOp);
                 blockBuilder.context().mapValue(varOp.result(), storeResult);
-
 
             } else if (op instanceof CoreOp.VarAccessOp.VarLoadOp varLoadOp) {
                 // This means a tensor is loading, and we expect the varLoadOp to be present already in the mapUsages,
