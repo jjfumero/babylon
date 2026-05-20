@@ -40,10 +40,6 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
         return new Tensor(shape, null, tensorAccess);
     }
 
-    public static Tensor create() {
-        return new Tensor(null, null, null);
-    }
-
     public static Tensor create(Shape shape, Class<?> klass) {
         return new Tensor(shape, klass, null);
     }

@@ -62,6 +62,7 @@ public class ScopedCodeBuilderContext implements LookupCarrier {
             if (value instanceof Op.Result result && result.op() instanceof VarLikeOp varOp) {
                 return (Op) varOp;
             }
+
             if (parent != null) {
                 return parent.resolve(value);
             }

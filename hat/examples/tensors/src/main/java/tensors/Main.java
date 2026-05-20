@@ -77,10 +77,7 @@ public class Main {
         final int ldb = size;
         final int ldc = size;
 
-        Tensor tensorA = Tensor.create();
-        Tensor tensorB = Tensor.create();
         Tensor acc = Tensor.create(Tensor.shape(16, 16, 16), float.class);
-
         Tensor.fill(acc, 0.0f);
 
         for (int i = 0; i < size; i += WMMA_K) {
@@ -91,9 +88,8 @@ public class Main {
             int bCol = warpN * WMMA_N;
 
             if (aRow < lda && aCol < lda && bRow < ldb && bCol < ldb) {
-
-                tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
-                tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
+                Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
+                Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
 
                 // acc = tensorA * tensorB + acc
                 Tensor.mma(acc, tensorA, tensorB, acc);
