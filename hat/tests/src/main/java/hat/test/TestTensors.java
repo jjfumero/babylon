@@ -51,11 +51,17 @@ import static optkl.ifacemapper.MappableIface.RO;
 import static optkl.ifacemapper.MappableIface.WO;
 
 /**
- * Check tensor operations in HAT. How to run?
+ * Test tensor operations in HAT.
  *
- * <p>
+ * <p>How to run?</p>
+ * <p>For the CUDA backend:
  * <code>
  * HAT=SHOW_CODE java -cp hat/job.jar hat.java test ffi-cuda hat.test.TestTensors
+ * </code>
+ * </p>
+ *
+ * <p>For the OpenCL backend:
+ * <code>
  * HAT=SHOW_CODE java -cp hat/job.jar hat.java test ffi-opencl hat.test.TestTensors
  * </code>
  * </p>
@@ -75,6 +81,7 @@ public class TestTensors {
         final int ldb = 1024;
         final int ldc = 1024;
 
+        // Initialize a tensor accumulator with zeros
         Tensor acc = Tensor.zeros(Tensor.shape(16, 16, 16), float.class);
 
         for (int i = 0; i < size; i += WMMA_K) {
@@ -85,15 +92,21 @@ public class TestTensors {
             int bCol = warpN * WMMA_N;
 
             if (aRow < lda && aCol < lda && bRow < ldb && bCol < ldb) {
+                // Load data from matrix A with the specified shape using column-major into a tensor of FP16
                 Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
+
+                // Load data from matrix B with the specified shape using column-major into a tensor of FP16
                 Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
 
+                // Perform the MMA operation:
                 // acc = tensorA * tensorB + acc
                 Tensor.mma(acc, tensorA, tensorB, acc);
             }
         }
         int cRow = warpM * WMMA_M;
         int cCol = warpN * WMMA_N;
+
+        // Store the resulting tensor into main memory using column-major layout.
         Tensor.store(matrixC, cRow, cCol, acc, ldc, Tensor.ofColumnMajor());
     }
 
