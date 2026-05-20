@@ -473,10 +473,12 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         if (matrixOrder.equals(TENSOR_ACC)) {
             gt();
         } else {// infer from the last parameter
-            if (access.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
+            comma();
+            if (access == null) {
+                id(WMMA_ROW_MAJOR);
+            } else if (access.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
                 // Expecting an invokeOp
                 var invoke = invoke(scopedCodeBuilderContext().lookup(), invokeOp);
-                comma();
                 if (invoke.resultTypeIs(Tensor.ColumMajor.class)) {
                     id(WMMA_COL_MAJOR);
                 } else if (invoke.resultTypeIs(Tensor.RowMajor.class)) {
@@ -484,8 +486,8 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
                 } else {
                     throw new CUDACodeGenException("[Error]");
                 }
-                gt();
             }
+            gt();
         }
         return self();
     }
@@ -568,7 +570,11 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
                 if (tensorToStore.equals(tensorVar)) {
                     Value value = storeLoadOp.operands().get(1);
                     if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
-                        return tensorLoadOp.operands().getLast();
+                        if (tensorLoadOp.operands().size() == INDEX_ACCESS + 1) {
+                            return tensorLoadOp.operands().getLast();
+                        } else {
+                            return null;
+                        }
                     }
                 }
             }
@@ -587,6 +593,14 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         return v instanceof Op.Result r ? findShape(tensorVar, r.op()) : null;
     }
 
+    // ABI
+    private static final int INDEX_LOAD = 0;
+    private static final int INDEX_ROW = 1;
+    private static final int INDEX_COL = 2;
+    private static final int INDEX_LDD = 3;
+    private static final int INDEX_SHAPE = 4;
+    private static final int INDEX_ACCESS = 5;
+
     public Value findShape(Value tensorVar, Op op) {
         Value shape = null;
         switch (op) {
@@ -595,7 +609,7 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
                 if (tensorToStore.equals(tensorVar)) {
                     Value value = storeLoadOp.operands().get(1);
                     if (value.declaringElement() instanceof HATTensorOp.TensorLoadOp tensorLoadOp) {
-                        return tensorLoadOp.operands().get(tensorLoadOp.operands().size()-2);
+                        return tensorLoadOp.operands().get(INDEX_SHAPE);
                     }
                 }
             }
@@ -697,10 +711,6 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             if (type == null) {
                 throw new CUDACodeGenException("Load Type not supported:" + type);
             }
-            if (valueAccessLayout == null) {
-                throw new CUDACodeGenException("Access Layout is null:");
-            }
-
         } else {
             throw new CUDACodeGenException("Value not supported");
         }
@@ -801,8 +811,8 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             }
         }
 
-        boolean isColumnMajor = true;
-        if (tensorVarOp != null) {
+        boolean isColumnMajor = false;
+        if (tensorVarOp != null && tensorLoadOp.operands().size() > 5) {
             Value value = tensorLoadOp.operands().getLast();
             isColumnMajor = isColumnMajor(value);
         }
@@ -861,7 +871,12 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
     public CudaHATKernelBuilder hatTensorStoreOp(HATTensorOp.TensorStoreOp tensorStoreOp) {
         List<Value> operands = tensorStoreOp.operands();
         // Access layout is the last operand
-        final boolean isColumnMajor = isColumnMajor(operands.get(5));
+        final boolean isColumnMajor;
+        if (tensorStoreOp.operands().size() == 6) {
+            isColumnMajor = isColumnMajor(operands.get(5));
+        } else {
+            isColumnMajor = false;
+        }
         return generateStoreTensor(operands, isColumnMajor);
     }
 

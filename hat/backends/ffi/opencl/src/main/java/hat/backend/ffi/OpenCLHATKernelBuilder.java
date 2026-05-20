@@ -334,9 +334,9 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
 
     private OpenCLHATKernelBuilder generateHatTensorCreate(int[] shape, Object klass, String varTensorName, Value v) {
         if (klass == null) {
-            // Share memory only for the input tiles (tensors)
+            // Local memory only for the input tiles (tensors)
             // The accumulator is stored in private memory
-            HAT_LOCAL_MEM().sp();
+            //HAT_LOCAL_MEM().sp();
         }
         final int sizeToAllocate = shape[0] * shape[1];
         switch (klass) {
@@ -852,8 +852,11 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         } else {
             throw new OpenCLCodeGenException("[Error][CodeGen] Expected to see an instance of tensorVarOp but `null` found");
         }
-        Value valueLayout = operands.get(5);
-        boolean isColumnMajor = isColumnMajor(valueLayout);
+
+        boolean isColumnMajor = false;
+        if (tensorLoadOp.operands().size() > 5) {
+            isColumnMajor = isColumnMajor(operands.get(5));
+        }
 
         generateTensorLoad(shape, iIndexValue, jIndexValue, isColumnMajor, leadingDimension, ptrValue, tensorVarOp);
         HAT_BARRIER();
@@ -999,8 +1002,11 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
 
         int[] shape = getShapeFromTensorVarOp(tensorVarOp);
 
-        Value accessLayout = operands.get(5);
-        final boolean isColumnMajor = isColumnMajor(accessLayout);
+
+        boolean isColumnMajor = false;
+        if (tensorStoreOp.operands().size() > 5) {
+            isColumnMajor = isColumnMajor(operands.get(5));
+        }
 
         generateTensorStore(shape, iIndexValue, jIndexValue, isColumnMajor, leadingDimension, ptrValue, tensorVarOp);
         return self();

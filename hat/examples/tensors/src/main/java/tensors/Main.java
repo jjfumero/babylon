@@ -77,8 +77,8 @@ public class Main {
         final int ldb = size;
         final int ldc = size;
 
-        Tensor acc = Tensor.create(Tensor.shape(16, 16, 16), float.class);
-        Tensor.fill(acc, 0.0f);
+        // Allocate the accumulator tensor and initialize to 0
+        Tensor acc = Tensor.zeros(Tensor.shape(16, 16, 16), float.class);
 
         for (int i = 0; i < size; i += WMMA_K) {
             int aRow = warpM * WMMA_M;

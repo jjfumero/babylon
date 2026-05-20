@@ -43,8 +43,6 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
         return new Tensor(shape, klass, null);
     }
 
-    // What do we do? a = fill(a, v)? or void fill(a, v)?
-    // If we say tensors are immutable, we should return a value
     public static void fill(Tensor acc, float value) {
     }
 
@@ -65,6 +63,10 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
 
     public static void store(F32Array matrix, int i, int j, Tensor resultTensor, int ld) {
     }
+
+    public static void store(F32ArrayPadded matrix, int i, int j, Tensor resultTensor, int ld) {
+    }
+
 
     public static void store(F32ArrayPadded matrix, int i, int j, Tensor resultTensor, int ld, Access tensorAccess) {
     }
