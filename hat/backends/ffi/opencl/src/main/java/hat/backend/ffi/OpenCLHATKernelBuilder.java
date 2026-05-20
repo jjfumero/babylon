@@ -336,7 +336,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         if (klass == null) {
             // Share memory only for the input tiles (tensors)
             // The accumulator is stored in private memory
-            //HAT_LOCAL_MEM().sp();
+            HAT_LOCAL_MEM().sp();
         }
         final int sizeToAllocate = shape[0] * shape[1];
         switch (klass) {
