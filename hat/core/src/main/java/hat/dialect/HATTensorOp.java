@@ -176,6 +176,36 @@ public abstract sealed class HATTensorOp extends HATOp {
         }
     }
 
+    public static final class TensorZerosOp extends HATTensorOp implements Precedence.Invoke {
+
+        private final CodeType codeType;
+
+        public TensorZerosOp(CodeType codeType, List<Value> operands) {
+            super(operands);
+            this.codeType = codeType;
+        }
+
+        public TensorZerosOp(TensorZerosOp op, CodeContext copyContext) {
+            super(op, copyContext);
+            this.codeType = op.codeType;
+        }
+
+        @Override
+        public Op transform(CodeContext copyContext, CodeTransformer opTransformer) {
+            return new TensorZerosOp(this, copyContext);
+        }
+
+        @Override
+        public CodeType resultType() {
+            return codeType;
+        }
+
+        @Override
+        public String externalizeOpName() {
+            return "hat.dialect.Tensor.Zeros";
+        }
+    }
+
     public static final class TensorMMAOp extends HATTensorOp implements Precedence.Invoke {
 
         private final CodeType codeType;

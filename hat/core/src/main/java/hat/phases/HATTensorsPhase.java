@@ -24,6 +24,8 @@
  */
 package hat.phases;
 
+import hat.dialect.HATTensorOp;
+import hat.dialect.HATTensorOp.TensorZerosOp;
 import hat.types.Tensor;
 import jdk.incubator.code.*;
 import jdk.incubator.code.dialect.core.CoreOp;
@@ -46,6 +48,7 @@ import static hat.dialect.HATTensorOp.TensorStoreLoadOp;
 import static hat.dialect.HATTensorOp.TensorStoreOp;
 import static hat.dialect.HATTensorOp.TensorVarLoadOp;
 import static hat.dialect.HATTensorOp.TensorVarOp;
+import static jdk.incubator.code.dialect.core.CoreOp.unreachable;
 import static jdk.incubator.code.dialect.core.CoreOp.varLoad;
 import static jdk.incubator.code.dialect.java.JavaType.VOID;
 
@@ -302,6 +305,67 @@ public record HATTensorsPhase() implements HATPhase {
         return transformWithPredicate(lookup, funcOp, new TensorFill()::transform, opsToProcess);
     }
 
+    private CoreOp.FuncOp zerosTensors(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp) {
+        Set<Op> opsToProcess = new HashSet<>();
+        OpHelper.Invoke.stream(lookup, funcOp)
+                .filter(invoke -> !invoke.returnsVoid())
+                .filter(invoke -> invoke.refIs(Tensor.class))
+                .filter(invoke -> invoke.name().equals("zeros"))
+                .forEach(invoke -> {
+                    opsToProcess.add(invoke.op());
+                    Value varValue = invoke.op().result().uses().getFirst();
+                    if (varValue.declaringElement() instanceof CoreOp.VarOp varOp) {
+                        opsToProcess.add(varOp);
+                    }
+                });
+
+        Map<Op, Value> map = new HashMap<>();
+        funcOp = funcOp.transform((blockBuilder, op) -> {
+            if (!opsToProcess.contains(op)) {
+                blockBuilder.op(op);
+            } else if (op instanceof JavaOp.InvokeOp invokeOp) {
+                // Create Tensor
+                List<Value> operands = blockBuilder.context().getValues(op.operands());
+
+                TensorCreateOp tensorCreateOp = new TensorCreateOp(invokeOp.resultType(), operands);
+                tensorCreateOp.setLocation(invokeOp.location());
+                Op.Result op1 = blockBuilder.op(tensorCreateOp);
+
+                Op.Result valueVar = invokeOp.result().uses().getFirst();
+                if (valueVar.declaringElement() instanceof CoreOp.VarOp varOp) {
+
+                    // Add Var
+                    List<Value> args = List.of(op1);
+                    TensorVarOp tensorVarOp = new TensorVarOp(varOp.varName(), varOp.resultType(), args);
+                    Op.Result op2 = blockBuilder.op(tensorVarOp);
+
+                    // TensorVarLoadOp
+                    List<Value> argsLoadOp = List.of(op2);
+                    TensorVarLoadOp tensorVarLoadOp = new TensorVarLoadOp(invokeOp.resultType(), argsLoadOp);
+                    Op.Result op3 = blockBuilder.op(tensorVarLoadOp);
+
+                    // Add Fill
+                    CoreOp.ConstantOp constant = CoreOp.constant(PrimitiveType.FLOAT, 0.0f);
+                    Op.Result op4 = blockBuilder.op(constant);
+
+                    List<Value> argsFill = List.of(op3, op4);
+                    TensorFillOp tensorFillOp = new TensorFillOp(VOID, argsFill);
+                    Op.Result op5 = blockBuilder.op(tensorFillOp);
+                    map.put(varOp, op2);
+                    blockBuilder.context().mapValue(invokeOp.result(), op5);
+                } else {
+                    throw new RuntimeException("Expected a VarOp");
+                }
+
+            } else if (op instanceof CoreOp.VarOp varOp) {
+                // Pass through value using the TensorVarOp created before
+                blockBuilder.context().mapValue(varOp.result(), map.get(varOp));
+            }
+            return blockBuilder;
+        });
+        return funcOp;
+    }
+
     private CoreOp.FuncOp mmaTensor(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp) {
         Set<Op> opsToProcess = filterOps(lookup, funcOp, "mma");
         return transformWithPredicate(lookup, funcOp, new TensorMMA()::transform, opsToProcess);
@@ -338,6 +402,7 @@ public record HATTensorsPhase() implements HATPhase {
         funcOp = createTensorsToRelocate(lookup, funcOp);
         funcOp = createTensors(lookup, funcOp);
         funcOp = fillTensors(lookup, funcOp);
+        funcOp = zerosTensors(lookup, funcOp);
         funcOp = mmaTensor(lookup, funcOp);
         funcOp = tensorLoad(lookup, funcOp);
         funcOp = tensorStoreOp(lookup, funcOp);

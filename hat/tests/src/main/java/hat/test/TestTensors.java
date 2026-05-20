@@ -74,10 +74,8 @@ public class TestTensors {
         final int lda = 1024;
         final int ldb = 1024;
         final int ldc = 1024;
-
-        Tensor acc = Tensor.create(Tensor.shape(16, 16, 16), float.class);
-        Tensor.fill(acc, 0.0f);
-        //Tensor acc = Tensor.zeros(Tensor.shape(16, 16, 16), float.class);
+        
+        Tensor acc = Tensor.zeros(Tensor.shape(16, 16, 16), float.class);
 
         for (int i = 0; i < size; i += WMMA_K) {
             int aRow = warpM * WMMA_M;

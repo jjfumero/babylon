@@ -63,6 +63,9 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
     public static void store(F32Array matrix, int i, int j, Tensor resultTensor, int ld, Access tensorAccess) {
     }
 
+    public static void store(F32Array matrix, int i, int j, Tensor resultTensor, int ld) {
+    }
+
     public static void store(F32ArrayPadded matrix, int i, int j, Tensor resultTensor, int ld, Access tensorAccess) {
     }
 

@@ -103,7 +103,6 @@ public interface HATOpDispatcher<T extends ScopeAwareJavaOrC99StyleCodeBuilder<T
 
     T hatTensorStoreOp(HATTensorOp.TensorStoreOp tensorStoreOp);
 
-
     @Override
     default T recurse(Op op) {
         if (op instanceof HATOp hatOp) {
