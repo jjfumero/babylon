@@ -29,18 +29,17 @@ import hat.buffer.F32Array;
 import hat.buffer.F32ArrayPadded;
 import optkl.IfaceValue;
 
-// Tensors are immutable
 public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implements IfaceValue {
 
     public static Shape shape(int dim1, int dim2, int dim3) {
         return new Shape(dim1, dim2, dim3);
     }
 
-    public static Tensor create(Shape shape, final Access tensorAccess) {
-        return new Tensor(shape, null, tensorAccess);
+    public static Tensor create(Shape shape, Class<?> klass) {
+        return new Tensor(shape, klass, null);
     }
 
-    public static Tensor create(Shape shape, Class<?> klass) {
+    public static Tensor zeros(Shape shape, Class<?> klass) {
         return new Tensor(shape, klass, null);
     }
 
@@ -53,11 +52,12 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
     }
 
     public static Tensor loadF16(F16Array matrix, int i, int j, int ld, Shape shape) {
-        return null;
+        // select Row Major as default
+        return new Tensor(shape, F16.class, ofRowMajor());
     }
 
     public static Tensor loadF16(F16Array matrix, int i, int j, int ld, Shape shape, final Access tensorAccess) {
-        return null;
+        return new Tensor(shape, F16.class, tensorAccess);
     }
 
     public static void store(F32Array matrix, int i, int j, Tensor resultTensor, int ld, Access tensorAccess) {
