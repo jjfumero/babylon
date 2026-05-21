@@ -34,7 +34,6 @@ import jdk.incubator.code.dialect.core.CoreOp;
 import jdk.incubator.code.dialect.core.CoreType;
 import jdk.incubator.code.dialect.core.VarType;
 import jdk.incubator.code.dialect.java.JavaOp;
-import jdk.incubator.code.dialect.java.PrimitiveType;
 import optkl.OpHelper;
 import optkl.Trxfmr;
 
@@ -58,6 +57,7 @@ import static hat.dialect.HATTensorOp.TensorStoreOp;
 import static hat.dialect.HATTensorOp.TensorVarLoadOp;
 import static hat.dialect.HATTensorOp.TensorVarOp;
 import static jdk.incubator.code.dialect.core.CoreOp.varLoad;
+import static jdk.incubator.code.dialect.java.JavaType.FLOAT;
 import static jdk.incubator.code.dialect.java.JavaType.VOID;
 
 
@@ -324,7 +324,7 @@ public record HATTensorsPhase() implements HATPhase {
                     blockBuilder.context().mapValue(invokeOp.result(), result);
                     map.put(varOp, result);
                 } else {
-                    throw new RuntimeException("Expected a VarOp");
+                    throw new IllegalStateException("Expected a VarOp");
                 }
             } else if (op instanceof CoreOp.VarOp varOp) {
                 blockBuilder.context().mapValue(varOp.result(), map.get(varOp));
@@ -396,7 +396,7 @@ public record HATTensorsPhase() implements HATPhase {
                     Op.Result op3 = blockBuilder.op(tensorVarLoadOp);
 
                     // Add Fill
-                    CoreOp.ConstantOp constant = CoreOp.constant(PrimitiveType.FLOAT, 0.0f);
+                    CoreOp.ConstantOp constant = CoreOp.constant(FLOAT, 0.0f);
                     Op.Result op4 = blockBuilder.op(constant);
 
                     List<Value> argsFill = List.of(op3, op4);
@@ -405,7 +405,7 @@ public record HATTensorsPhase() implements HATPhase {
                     map.put(varOp, op2);
                     blockBuilder.context().mapValue(invokeOp.result(), op5);
                 } else {
-                    throw new RuntimeException("Expected a VarOp");
+                    throw new IllegalStateException("Expected a VarOp");
                 }
 
             } else if (op instanceof CoreOp.VarOp varOp) {
