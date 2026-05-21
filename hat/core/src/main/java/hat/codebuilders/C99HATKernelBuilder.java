@@ -40,7 +40,6 @@ import hat.types.BF16;
 import hat.types.F16;
 import hat.types.Tensor;
 import jdk.incubator.code.dialect.java.ClassType;
-import jdk.incubator.code.dialect.java.FieldRef;
 import jdk.incubator.code.dialect.java.JavaOp;
 import jdk.incubator.code.dialect.java.JavaType;
 import jdk.incubator.code.dialect.java.PrimitiveType;
@@ -49,7 +48,6 @@ import optkl.IfaceValue;
 import jdk.incubator.code.Value;
 import optkl.OpHelper;
 import optkl.codebuilders.ScopedCodeBuilderContext;
-import optkl.exceptions.CodeGenException;
 import optkl.ifacemapper.BoundSchema;
 import optkl.ifacemapper.Schema;
 import jdk.incubator.code.Op;
@@ -59,7 +57,6 @@ import optkl.util.Mutable;
 import jdk.incubator.code.dialect.core.CoreOp;
 import optkl.codebuilders.CodeBuilder;
 
-import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.SequencedSet;
 import java.util.concurrent.ThreadLocalRandom;
@@ -960,6 +957,11 @@ public abstract class C99HATKernelBuilder<T extends C99HATKernelBuilder<T>> exte
             }
         }
         return false;
+    }
+
+    @Override
+    public T hatTensorShapeOp(HATTensorOp.TensorShapeOp tensorShapeOp) {
+        return self();
     }
 
 }

@@ -293,10 +293,4 @@ public class OpenCLJExtractedHATKernelBuilder extends C99HATKernelBuilder<OpenCL
     public OpenCLJExtractedHATKernelBuilder hatTensorShapeOp(HATTensorOp.TensorShapeOp tensorShapeOp) {
         return blockComment("Not supported yet");
     }
-
-
-    @Override
-    public OpenCLJExtractedHATKernelBuilder shapeVarOp(HATTensorOp.ShapeVarOp shapeVarOp) {
-        return self();
-    }
 }

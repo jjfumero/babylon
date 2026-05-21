@@ -672,7 +672,6 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
                 return processShapeTensor(tensorShapeOp.operands(), shape);
             }
             case TensorVarOp tensorVarOp -> obtainShapeTensor(tensorVarOp.operands().getFirst(), shape);
-            case HATTensorOp.ShapeVarOp shapeVarOp -> obtainShapeTensor(shapeVarOp.operands().getFirst(), shape);
             default ->
                     throw new CUDACodeGenException("Op not expected: Found: " + shapeValue.declaringElement().getClass());
         }
@@ -907,17 +906,6 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             isColumnMajor = false;
         }
         return generateStoreTensor(operands, isColumnMajor);
-    }
-
-    @Override
-    public CudaHATKernelBuilder hatTensorShapeOp(HATTensorOp.TensorShapeOp tensorShapeOp) {
-        // This is just a marker
-        return self();
-    }
-
-    @Override
-    public CudaHATKernelBuilder shapeVarOp(HATTensorOp.ShapeVarOp shapeVarOp) {
-        return self();
     }
 
     private static final String ARRAY = "array";

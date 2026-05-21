@@ -24,7 +24,6 @@
  */
 package hat.phases;
 
-import hat.dialect.HATTensorOp.ShapeVarOp;
 import hat.dialect.HATTensorOp.TensorShapeOp;
 import hat.types.Tensor;
 import jdk.incubator.code.Block;
@@ -59,7 +58,6 @@ import static hat.dialect.HATTensorOp.TensorStoreOp;
 import static hat.dialect.HATTensorOp.TensorVarLoadOp;
 import static hat.dialect.HATTensorOp.TensorVarOp;
 import static jdk.incubator.code.dialect.core.CoreOp.varLoad;
-import static jdk.incubator.code.dialect.java.JavaType.INT;
 import static jdk.incubator.code.dialect.java.JavaType.VOID;
 
 
@@ -84,18 +82,6 @@ public record HATTensorsPhase() implements HATPhase {
             switch (op) {
                 case CoreOp.VarOp varOp -> replaceOp(blockBuilder, varOp, new TensorVarOp(varOp.varName(), varOp.resultType(), operands));
                 case JavaOp.InvokeOp invokeOp -> replaceOp(blockBuilder, invokeOp, new TensorCreateOp(invokeOp.resultType(), operands));
-                default -> blockBuilder.op(op);
-            }
-        }
-    }
-    private static class TensorShape implements TensorTransformer {
-
-        @Override
-        public void transform(Block.Builder blockBuilder, Op op) {
-            List<Value> operands = blockBuilder.context().getValues(op.operands());
-            switch (op) {
-                case CoreOp.VarOp varOp -> replaceOp(blockBuilder, varOp, new ShapeVarOp(varOp.varName(), varOp.resultType(), operands));
-                case JavaOp.InvokeOp invokeOp -> replaceOp(blockBuilder, invokeOp, new TensorShapeOp(INT, operands));
                 default -> blockBuilder.op(op);
             }
         }
@@ -321,7 +307,30 @@ public record HATTensorsPhase() implements HATPhase {
                             .findFirst()
                             .ifPresent(opsToProcess::add);
                 });
-        return transformWithPredicate(lookup, funcOp, new TensorShape()::transform, opsToProcess);
+
+        Map<Op, Value> map = new HashMap<>();
+        funcOp = funcOp.transform((blockBuilder, op) -> {
+            if (!opsToProcess.contains(op)) {
+                blockBuilder.op(op);
+            } else if (op instanceof JavaOp.InvokeOp invokeOp) {
+                List<Value> operands = blockBuilder.context().getValues(op.operands());
+                Op.Result valueVar = invokeOp.result().uses().getFirst();
+                if (valueVar.declaringElement() instanceof CoreOp.VarOp varOp) {
+                    TensorShapeOp tensorShapeOp = new TensorShapeOp(varOp.resultType(), operands);
+                    Op.Result result = blockBuilder.op(tensorShapeOp);
+                    blockBuilder.context().mapValue(invokeOp.result(), result);
+                    map.put(varOp, result);
+                } else {
+                    throw new RuntimeException("Expected a VarOp");
+                }
+            } else if (op instanceof CoreOp.VarOp varOp) {
+                // Pass through value using the TensorVarOp created before
+                blockBuilder.context().mapValue(varOp.result(), map.get(varOp));
+            }
+            return blockBuilder;
+        });
+        return funcOp;
+
     }
 
     private Set<Op> filterOps(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp, String methodIntrinsicName) {

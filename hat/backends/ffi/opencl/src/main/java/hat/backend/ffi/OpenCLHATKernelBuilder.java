@@ -449,7 +449,6 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
                 return processShapeTensor(tensorShapeOp.operands(), shape);
             }
             case HATTensorOp.TensorVarOp tensorVarOp -> obtainShapeTensor(tensorVarOp.operands().getFirst(), shape);
-            case HATTensorOp.ShapeVarOp shapeVarOp -> obtainShapeTensor(shapeVarOp.operands().getFirst(), shape);
             default ->
                     throw new OpenCLCodeGenException("Op not expected: Found: " + shapeValue.declaringElement().getClass());
         }
@@ -1003,15 +1002,4 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         generateTensorStore(shape, iIndexValue, jIndexValue, isColumnMajor, leadingDimension, ptrValue, tensorVarOp);
         return self();
     }
-
-    @Override
-    public OpenCLHATKernelBuilder hatTensorShapeOp(HATTensorOp.TensorShapeOp tensorShapeOp) {
-        return self();
-    }
-
-    @Override
-    public OpenCLHATKernelBuilder shapeVarOp(HATTensorOp.ShapeVarOp shapeVarOp) {
-        return self();
-    }
-
 }
