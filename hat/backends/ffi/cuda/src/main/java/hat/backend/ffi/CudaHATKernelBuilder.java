@@ -35,6 +35,7 @@ import jdk.incubator.code.dialect.core.CoreOp;
 import jdk.incubator.code.dialect.java.ClassType;
 import jdk.incubator.code.dialect.java.FieldRef;
 import jdk.incubator.code.dialect.java.JavaOp;
+import optkl.IfaceValue;
 import optkl.OpHelper;
 import optkl.codebuilders.CodeBuilder;
 import optkl.codebuilders.ScopedCodeBuilderContext;
@@ -49,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 
+import static hat.dialect.HATTensorOp.TensorShapeOp;
+import static hat.dialect.HATTensorOp.TensorVarOp;
 import static optkl.OpHelper.Invoke.invoke;
 
 public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuilder> {
@@ -639,22 +642,48 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         tensorTypeTable.put("loadF32", "float");
     }
 
-    private List<Integer> obtainShapeTensor(Value shapeValue) {
-        List<Integer> shape = new ArrayList<>();
-        if (shapeValue.declaringElement() instanceof JavaOp.InvokeOp invokeOp) {
-            List<Value> shapeOperands = invokeOp.operands();
-            for (Value shapeOperand : shapeOperands) {
-                if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
-                    shape.add((int) constantOp.value());
-                } else {
-                    throw new CUDACodeGenException("Error: expected to find a ConstantOp, but found a " + shapeOperand.declaringElement().getClass());
+    private List<Integer> processShapeTensor(List<Value> shapeOperands, List<Integer> shape) {
+        for (Value shapeOperand : shapeOperands) {
+            while (!(shapeOperand.declaringElement() instanceof CoreOp.ConstantOp)) {
+                if (shapeOperand.declaringElement() instanceof CoreOp.VarAccessOp.VarLoadOp varLoadOp) {
+                    shapeOperand = varLoadOp.varOperand();
+                } else if (shapeOperand.declaringElement() instanceof CoreOp.VarOp varOp) {
+                    shapeOperand = varOp.operands().getFirst();
                 }
             }
-        } else {
-            throw new CUDACodeGenException("InvokeOp expected, but found: " + shapeValue.declaringElement().getClass());
+            if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
+                shape.add((int) constantOp.value());
+            } else {
+                throw new CUDACodeGenException("Error: expected to find a ConstantOp, but found a " + shapeOperand.declaringElement().getClass());
+            }
         }
+        return shape;
+    }
+
+    private List<Integer> obtainShapeTensor(Value shapeValue, List<Integer> shape) {
+        switch (shapeValue.declaringElement()) {
+            case JavaOp.InvokeOp invokeOp when invokeOp.invokeReference().name().equals("shape") -> {
+                List<Value> shapeOperands = invokeOp.operands();
+                return processShapeTensor(shapeOperands, shape);
+            }
+            case CoreOp.VarAccessOp varAccessOp -> obtainShapeTensor(varAccessOp.varOperand(), shape);
+            case CoreOp.VarOp varOp -> obtainShapeTensor(varOp.operands().getFirst(), shape);
+            case TensorShapeOp tensorShapeOp -> {
+                return processShapeTensor(tensorShapeOp.operands(), shape);
+            }
+            case TensorVarOp tensorVarOp -> obtainShapeTensor(tensorVarOp.operands().getFirst(), shape);
+            case HATTensorOp.ShapeVarOp shapeVarOp -> obtainShapeTensor(shapeVarOp.operands().getFirst(), shape);
+            default ->
+                    throw new CUDACodeGenException("Op not expected: Found: " + shapeValue.declaringElement().getClass());
+        }
+        return shape;
+    }
+
+    private List<Integer> obtainShapeTensor(Value shapeValue) {
+        List<Integer> shape = new ArrayList<>();
+        obtainShapeTensor(shapeValue, shape);
         if (shape.size() != 3) {
-            throw new CUDACodeGenException("Shape must have three values");
+            throw new CUDACodeGenException("Shape must have three values, but it has " + shape.size());
         }
         return shape;
     }
@@ -878,6 +907,17 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
             isColumnMajor = false;
         }
         return generateStoreTensor(operands, isColumnMajor);
+    }
+
+    @Override
+    public CudaHATKernelBuilder hatTensorShapeOp(HATTensorOp.TensorShapeOp tensorShapeOp) {
+        // This is just a marker
+        return self();
+    }
+
+    @Override
+    public CudaHATKernelBuilder shapeVarOp(HATTensorOp.ShapeVarOp shapeVarOp) {
+        return self();
     }
 
     private static final String ARRAY = "array";

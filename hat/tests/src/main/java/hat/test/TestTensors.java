@@ -71,9 +71,10 @@ public class TestTensors {
 
     @Reflect
     public static void mxmTensorsColumnMajor(@RO KernelContext kc, @RO F16Array matrixA, @RO F16Array matrixB, @WO F32Array matrixC, int size) {
-        final int WMMA_M = 16;
-        final int WMMA_N = 16;
-        final int WMMA_K = 16;
+        final int SHAPE = 16;
+        final int WMMA_M = SHAPE;
+        final int WMMA_N = SHAPE;
+        final int WMMA_K = SHAPE;
         int warpM = kc.gix / kc.wrs;
         int warpN = kc.giy;
 
@@ -81,22 +82,23 @@ public class TestTensors {
         final int ldb = 1024;
         final int ldc = 1024;
 
+        var shape = Tensor.shape(WMMA_M, WMMA_N, WMMA_K);
+
         // Initialize a tensor accumulator with zeros
-        Tensor acc = Tensor.zeros(Tensor.shape(16, 16, 16), float.class);
+        Tensor acc = Tensor.zeros(shape, float.class);
 
         for (int i = 0; i < size; i += WMMA_K) {
             int aRow = warpM * WMMA_M;
             int aCol = i;
-
             int bRow = i;
             int bCol = warpN * WMMA_N;
 
             if (aRow < lda && aCol < lda && bRow < ldb && bCol < ldb) {
                 // Load data from matrix A with the specified shape using column-major into a tensor of FP16
-                Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
+                Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, shape, Tensor.ofColumnMajor());
 
                 // Load data from matrix B with the specified shape using column-major into a tensor of FP16
-                Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
+                Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, shape, Tensor.ofColumnMajor());
 
                 // Perform the MMA operation:
                 // acc = tensorA * tensorB + acc
@@ -127,6 +129,7 @@ public class TestTensors {
 
     @Reflect
     public static void mxmTensorsRowColumnMajor(@RO KernelContext kc, @RO F16Array matrixA, @RO F16Array matrixB, @WO F32Array matrixC, int size) {
+
         final int WMMA_M = 16;
         final int WMMA_N = 16;
         final int WMMA_K = 16;
@@ -137,6 +140,7 @@ public class TestTensors {
         final int ldb = 1024;
         final int ldc = 1024;
 
+        // We keep explicit constant in this version to check shape with ConstantOp
         Tensor acc = Tensor.create(Tensor.shape(16, 16, 16), float.class);
 
         Tensor.fill(acc, 0.0f);
@@ -329,6 +333,7 @@ public class TestTensors {
             matrixBHalf.array(j).value(F16.floatToF16(r.nextFloat()).value());
         }
 
+        // Run multiple time
         for (int i = 0; i < 10; i++) {
             accelerator.compute(cc -> mxmTensorsColumnMajor(cc, matrixAHalf, matrixBHalf, matrixC, size));
         }
@@ -366,9 +371,7 @@ public class TestTensors {
             matrixBHalf.array(j).value(F16.floatToF16(r.nextFloat()).value());
         }
 
-        for (int i = 0; i < 10; i++) {
-            accelerator.compute(cc -> mxmTensorsRowColumnMajor(cc, matrixAHalf, matrixBHalf, matrixC, size));
-        }
+        accelerator.compute(cc -> mxmTensorsRowColumnMajor(cc, matrixAHalf, matrixBHalf, matrixC, size));
 
         runSequentialRowAndColMajor(matrixAHalf, matrixBHalf, resultSequential, size);
 
@@ -406,11 +409,7 @@ public class TestTensors {
             matrixAHalf.array(j).value(F16.floatToF16(r.nextFloat()).value());
             matrixBHalf.array(j).value(F16.floatToF16(r.nextFloat()).value());
         }
-
-        for (int i = 0; i < 10; i++) {
-            accelerator.compute(cc -> mxmTensorsRowMajor(cc, matrixAHalf, matrixBHalf, matrixC, size));
-        }
-
+        accelerator.compute(cc -> mxmTensorsRowMajor(cc, matrixAHalf, matrixBHalf, matrixC, size));
         runSequentialRowMajor(matrixAHalf, matrixBHalf, resultSequential, size);
 
         for (int i = 0; i < size; i++) {
@@ -448,9 +447,7 @@ public class TestTensors {
             matrixBHalf.array(j).value(F16.floatToF16(r.nextFloat()).value());
         }
 
-        for (int i = 0; i < 10; i++) {
-            accelerator.compute(cc -> mxmTensorsDefaultAccess(cc, matrixAHalf, matrixBHalf, matrixC, size));
-        }
+        accelerator.compute(cc -> mxmTensorsDefaultAccess(cc, matrixAHalf, matrixBHalf, matrixC, size));
 
         runSequentialRowMajor(matrixAHalf, matrixBHalf, resultSequential, size);
 

@@ -24,10 +24,13 @@
  */
 package hat.phases;
 
-import hat.dialect.HATTensorOp;
-import hat.dialect.HATTensorOp.TensorZerosOp;
+import hat.dialect.HATTensorOp.ShapeVarOp;
+import hat.dialect.HATTensorOp.TensorShapeOp;
 import hat.types.Tensor;
-import jdk.incubator.code.*;
+import jdk.incubator.code.Block;
+import jdk.incubator.code.CodeElement;
+import jdk.incubator.code.Op;
+import jdk.incubator.code.Value;
 import jdk.incubator.code.dialect.core.CoreOp;
 import jdk.incubator.code.dialect.core.CoreType;
 import jdk.incubator.code.dialect.core.VarType;
@@ -37,7 +40,14 @@ import optkl.OpHelper;
 import optkl.Trxfmr;
 
 import java.lang.invoke.MethodHandles;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.SequencedSet;
+import java.util.Set;
 import java.util.function.BiConsumer;
 
 import static hat.dialect.HATTensorOp.TensorCreateOp;
@@ -48,9 +58,10 @@ import static hat.dialect.HATTensorOp.TensorStoreLoadOp;
 import static hat.dialect.HATTensorOp.TensorStoreOp;
 import static hat.dialect.HATTensorOp.TensorVarLoadOp;
 import static hat.dialect.HATTensorOp.TensorVarOp;
-import static jdk.incubator.code.dialect.core.CoreOp.unreachable;
 import static jdk.incubator.code.dialect.core.CoreOp.varLoad;
+import static jdk.incubator.code.dialect.java.JavaType.INT;
 import static jdk.incubator.code.dialect.java.JavaType.VOID;
+
 
 public record HATTensorsPhase() implements HATPhase {
 
@@ -73,6 +84,18 @@ public record HATTensorsPhase() implements HATPhase {
             switch (op) {
                 case CoreOp.VarOp varOp -> replaceOp(blockBuilder, varOp, new TensorVarOp(varOp.varName(), varOp.resultType(), operands));
                 case JavaOp.InvokeOp invokeOp -> replaceOp(blockBuilder, invokeOp, new TensorCreateOp(invokeOp.resultType(), operands));
+                default -> blockBuilder.op(op);
+            }
+        }
+    }
+    private static class TensorShape implements TensorTransformer {
+
+        @Override
+        public void transform(Block.Builder blockBuilder, Op op) {
+            List<Value> operands = blockBuilder.context().getValues(op.operands());
+            switch (op) {
+                case CoreOp.VarOp varOp -> replaceOp(blockBuilder, varOp, new ShapeVarOp(varOp.varName(), varOp.resultType(), operands));
+                case JavaOp.InvokeOp invokeOp -> replaceOp(blockBuilder, invokeOp, new TensorShapeOp(INT, operands));
                 default -> blockBuilder.op(op);
             }
         }
@@ -284,6 +307,23 @@ public record HATTensorsPhase() implements HATPhase {
         return transformWithPredicate(lookup, funcOp, new TensorView()::transform, opsToProcess);
     }
 
+    private CoreOp.FuncOp tensorShape(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp) {
+        Set<Op> opsToProcess = new HashSet<>();
+        OpHelper.Invoke.stream(lookup, funcOp)
+                .filter(invoke -> !invoke.returnsVoid())
+                .filter(invoke -> invoke.refIs(Tensor.class))
+                .filter(invoke -> invoke.name().equals("shape"))
+                .forEach( invoke -> {
+                    opsToProcess.add(invoke.op());
+                    invoke.op().result().uses().stream()
+                            .filter(result -> (result.op() instanceof CoreOp.VarOp))
+                            .map(result -> (CoreOp.VarOp) result.op())
+                            .findFirst()
+                            .ifPresent(opsToProcess::add);
+                });
+        return transformWithPredicate(lookup, funcOp, new TensorShape()::transform, opsToProcess);
+    }
+
     private Set<Op> filterOps(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp, String methodIntrinsicName) {
         Set<Op> opsToProcess = new HashSet<>();
         OpHelper.Invoke.stream(lookup, funcOp)
@@ -401,6 +441,7 @@ public record HATTensorsPhase() implements HATPhase {
     public CoreOp.FuncOp transform(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp) {
         funcOp = createTensorsToRelocate(lookup, funcOp);
         funcOp = createTensors(lookup, funcOp);
+        funcOp = tensorShape(lookup, funcOp);
         funcOp = fillTensors(lookup, funcOp);
         funcOp = zerosTensors(lookup, funcOp);
         funcOp = mmaTensor(lookup, funcOp);

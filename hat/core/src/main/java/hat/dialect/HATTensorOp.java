@@ -85,6 +85,44 @@ public abstract sealed class HATTensorOp extends HATOp {
         }
     }
 
+    public static final class ShapeVarOp extends HATTensorOp implements VarLikeOp, StatementLikeOp {
+
+        private final VarType codeType;
+        private final String varName;
+
+        public ShapeVarOp(String varName, VarType codeType, List<Value> operands) {
+            super(operands);
+            this.varName = varName;
+            this.codeType = codeType;
+        }
+
+        public ShapeVarOp(ShapeVarOp op, CodeContext copyContext) {
+            super(op, copyContext);
+            this.varName = op.varName;
+            this.codeType = op.codeType;
+        }
+
+        @Override
+        public Op transform(CodeContext copyContext, CodeTransformer opTransformer) {
+            return new ShapeVarOp(this, copyContext);
+        }
+
+        @Override
+        public CodeType resultType() {
+            return codeType;
+        }
+
+        @Override
+        public Map<String, Object> externalize() {
+            return Map.of("hat.dialect.ShapeVarOp." + varName, codeType);
+        }
+
+        @Override
+        public String varName() {
+            return varName;
+        }
+    }
+
     public static final class TensorCreateOp extends HATTensorOp implements Precedence.Invoke {
 
         private final CodeType codeType;
@@ -334,5 +372,33 @@ public abstract sealed class HATTensorOp extends HATOp {
         }
     }
 
+    public static final class TensorShapeOp extends HATTensorOp implements Precedence.Invoke {
 
+        private final CodeType codeType;
+
+        public TensorShapeOp(CodeType codeType, List<Value> operands) {
+            super(operands);
+            this.codeType = codeType;
+        }
+
+        public TensorShapeOp(TensorShapeOp op, CodeContext copyContext) {
+            super(op, copyContext);
+            this.codeType = op.codeType;
+        }
+
+        @Override
+        public Op transform(CodeContext copyContext, CodeTransformer opTransformer) {
+            return new TensorShapeOp(this, copyContext);
+        }
+
+        @Override
+        public CodeType resultType() {
+            return codeType;
+        }
+
+        @Override
+        public String externalizeOpName() {
+            return "hat.dialect.Tensor.TensorShape";
+        }
+    }
 }

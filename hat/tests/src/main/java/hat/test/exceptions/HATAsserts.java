@@ -54,13 +54,13 @@ public class HATAsserts {
     }
 
     public static void assertEquals(float expected, float actual, float delta) {
-        if (Math.abs(expected - actual) > delta) {
+        if (Float.isNaN(actual) || Math.abs(expected - actual) > delta) {
             throw new HATAssertionError("Expected: " + expected + " != actual: " + actual);
         }
     }
 
     public static void assertEquals(double expected, double actual, double delta) {
-        if (Math.abs(expected - actual) > delta) {
+        if (Double.isNaN(actual) || Math.abs(expected - actual) > delta) {
             throw new HATAssertionError("Expected: " + expected + " != actual: " + actual);
         }
     }
