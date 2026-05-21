@@ -299,14 +299,17 @@ public record HATTensorsPhase() implements HATPhase {
                 .filter(invoke -> !invoke.returnsVoid())
                 .filter(invoke -> invoke.refIs(Tensor.class))
                 .filter(invoke -> invoke.name().equals("shape"))
-                .forEach( invoke -> {
-                    opsToProcess.add(invoke.op());
-                    invoke.op().result().uses().stream()
-                            .filter(result -> (result.op() instanceof CoreOp.VarOp))
-                            .map(result -> (CoreOp.VarOp) result.op())
-                            .findFirst()
-                            .ifPresent(opsToProcess::add);
-                });
+                .forEach( invoke ->
+                        invoke.op().result().uses().stream()
+                        .filter(result -> (result.op() instanceof CoreOp.VarOp))
+                        .map(result -> (CoreOp.VarOp) result.op())
+                        .findFirst()
+                        .ifPresent(x -> {
+                            // We only process shape with a node in the case of a declaration.
+                            // Otherwise, we process the shape via a Java Invoke.
+                            opsToProcess.add(x);
+                            opsToProcess.add(invoke.op());
+                        }));
 
         Map<Op, Value> map = new HashMap<>();
         funcOp = funcOp.transform((blockBuilder, op) -> {
@@ -324,7 +327,6 @@ public record HATTensorsPhase() implements HATPhase {
                     throw new RuntimeException("Expected a VarOp");
                 }
             } else if (op instanceof CoreOp.VarOp varOp) {
-                // Pass through value using the TensorVarOp created before
                 blockBuilder.context().mapValue(varOp.result(), map.get(varOp));
             }
             return blockBuilder;
