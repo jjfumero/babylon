@@ -990,7 +990,6 @@ public abstract class C99HATKernelBuilder<T extends C99HATKernelBuilder<T>> exte
         return shape;
     }
 
-
     protected T indexForTensor(boolean isColumnMajor, Value iIndex, Value jIndex, Value ldSize) {
         Value a = isColumnMajor ? iIndex : jIndex;
         Value b = isColumnMajor ? jIndex : iIndex;

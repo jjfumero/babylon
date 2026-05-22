@@ -33,9 +33,7 @@ import hat.types.F16;
 import hat.types.Tensor;
 import jdk.incubator.code.dialect.core.CoreOp;
 import jdk.incubator.code.dialect.java.ClassType;
-import jdk.incubator.code.dialect.java.FieldRef;
 import jdk.incubator.code.dialect.java.JavaOp;
-import optkl.IfaceValue;
 import optkl.OpHelper;
 import optkl.codebuilders.CodeBuilder;
 import optkl.codebuilders.ScopedCodeBuilderContext;
@@ -44,14 +42,11 @@ import jdk.incubator.code.Op;
 import jdk.incubator.code.Value;
 import jdk.incubator.code.dialect.java.PrimitiveType;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 
-import static hat.dialect.HATTensorOp.TensorShapeOp;
-import static hat.dialect.HATTensorOp.TensorVarOp;
 import static optkl.OpHelper.Invoke.invoke;
 
 public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuilder> {
