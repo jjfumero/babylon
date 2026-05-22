@@ -642,51 +642,6 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         tensorTypeTable.put("loadF32", "float");
     }
 
-    private List<Integer> processShapeTensor(List<Value> shapeOperands, List<Integer> shape) {
-        for (Value shapeOperand : shapeOperands) {
-            while (!(shapeOperand.declaringElement() instanceof CoreOp.ConstantOp)) {
-                if (shapeOperand.declaringElement() instanceof CoreOp.VarAccessOp.VarLoadOp varLoadOp) {
-                    shapeOperand = varLoadOp.varOperand();
-                } else if (shapeOperand.declaringElement() instanceof CoreOp.VarOp varOp) {
-                    shapeOperand = varOp.operands().getFirst();
-                }
-            }
-            if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
-                shape.add((int) constantOp.value());
-            } else {
-                throw new CUDACodeGenException("Error: expected to find a ConstantOp, but found a " + shapeOperand.declaringElement().getClass());
-            }
-        }
-        return shape;
-    }
-
-    private List<Integer> obtainShapeTensor(Value shapeValue, List<Integer> shape) {
-        switch (shapeValue.declaringElement()) {
-            case JavaOp.InvokeOp invokeOp when invokeOp.invokeReference().name().equals("shape") -> {
-                List<Value> shapeOperands = invokeOp.operands();
-                return processShapeTensor(shapeOperands, shape);
-            }
-            case CoreOp.VarAccessOp varAccessOp -> obtainShapeTensor(varAccessOp.varOperand(), shape);
-            case CoreOp.VarOp varOp -> obtainShapeTensor(varOp.operands().getFirst(), shape);
-            case TensorShapeOp tensorShapeOp -> {
-                return processShapeTensor(tensorShapeOp.operands(), shape);
-            }
-            case TensorVarOp tensorVarOp -> obtainShapeTensor(tensorVarOp.operands().getFirst(), shape);
-            default ->
-                    throw new CUDACodeGenException("Op not expected: Found: " + shapeValue.declaringElement().getClass());
-        }
-        return shape;
-    }
-
-    private List<Integer> obtainShapeTensor(Value shapeValue) {
-        List<Integer> shape = new ArrayList<>();
-        obtainShapeTensor(shapeValue, shape);
-        if (shape.size() != 3) {
-            throw new CUDACodeGenException("Shape must have three values, but it has " + shape.size());
-        }
-        return shape;
-    }
-
     private CudaHATKernelBuilder generateTensorAccumulateCreate(HATTensorOp.TensorCreateOp tensorCreateOp) {
         // tensor declaration for the accumulator
         Value shapeValue = tensorCreateOp.operands().getFirst();

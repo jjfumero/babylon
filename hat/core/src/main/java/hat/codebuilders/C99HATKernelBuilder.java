@@ -57,6 +57,7 @@ import optkl.util.Mutable;
 import jdk.incubator.code.dialect.core.CoreOp;
 import optkl.codebuilders.CodeBuilder;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.SequencedSet;
 import java.util.concurrent.ThreadLocalRandom;
@@ -924,6 +925,71 @@ public abstract class C99HATKernelBuilder<T extends C99HATKernelBuilder<T>> exte
     }
 
     protected abstract String mapMathIntrinsic(String name);
+
+    protected List<Integer> obtainShapeTensor(Value shapeValue) {
+        List<Integer> shape = new ArrayList<>();
+        obtainShapeTensor(shapeValue, shape);
+        if (shape.size() != 3) {
+            throw new IllegalStateException("Shape must have three values, but it has " + shape.size());
+        }
+        return shape;
+    }
+
+    protected List<Integer> getShapeFromTensorVarOp(HATTensorOp.TensorVarOp tensorVarOp) {
+        Value tensorCreateValueOp = tensorVarOp.operands().getFirst();
+        if (tensorCreateValueOp.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
+            // First parameter: shapeValue
+            Value valueShape = tensorCreateOp.operands().getFirst();
+            return obtainShapeTensor(valueShape);
+        }
+        return List.of();
+    }
+
+    protected List<Integer> getShapeFromTensorCreateValue(Value tensorCreateValue) {
+        if (tensorCreateValue.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
+            // First parameters: analysis of the shape
+            Value valueShape = tensorCreateOp.operands().getFirst();
+            return obtainShapeTensor(valueShape);
+        }
+        return List.of();
+    }
+
+    protected List<Integer> processShapeTensor(List<Value> shapeOperands, List<Integer> shape) {
+        for (Value shapeOperand : shapeOperands) {
+            while (!(shapeOperand.declaringElement() instanceof CoreOp.ConstantOp)) {
+                if (shapeOperand.declaringElement() instanceof CoreOp.VarAccessOp.VarLoadOp varLoadOp) {
+                    shapeOperand = varLoadOp.varOperand();
+                } else if (shapeOperand.declaringElement() instanceof CoreOp.VarOp varOp) {
+                    shapeOperand = varOp.operands().getFirst();
+                }
+            }
+            if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
+                shape.add((int) constantOp.value());
+            } else {
+                throw new IllegalStateException("Error: expected to find a ConstantOp, but found a " + shapeOperand.declaringElement().getClass());
+            }
+        }
+        return shape;
+    }
+
+    protected List<Integer> obtainShapeTensor(Value shapeValue, List<Integer> shape) {
+        switch (shapeValue.declaringElement()) {
+            case JavaOp.InvokeOp invokeOp when invokeOp.invokeReference().name().equals("shape") -> {
+                List<Value> shapeOperands = invokeOp.operands();
+                return processShapeTensor(shapeOperands, shape);
+            }
+            case CoreOp.VarAccessOp varAccessOp -> obtainShapeTensor(varAccessOp.varOperand(), shape);
+            case CoreOp.VarOp varOp -> obtainShapeTensor(varOp.operands().getFirst(), shape);
+            case HATTensorOp.TensorShapeOp tensorShapeOp -> {
+                return processShapeTensor(tensorShapeOp.operands(), shape);
+            }
+            case HATTensorOp.TensorVarOp tensorVarOp -> obtainShapeTensor(tensorVarOp.operands().getFirst(), shape);
+            default ->
+                    throw new IllegalStateException("Op not expected: Found: " + shapeValue.declaringElement().getClass());
+        }
+        return shape;
+    }
+
 
     protected T indexForTensor(boolean isColumnMajor, Value iIndex, Value jIndex, Value ldSize) {
         Value a = isColumnMajor ? iIndex : jIndex;

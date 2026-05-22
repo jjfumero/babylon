@@ -360,14 +360,14 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         } else {
             throw new OpenCLCodeGenException("Value not supported");
         }
-        List<Integer> shape = getShapeFromValueShape(shapeValue);
+        List<Integer> shape = obtainShapeTensor(shapeValue);
         return generateHatTensorCreate(shape, null, varTensorName, v);
     }
 
     private OpenCLHATKernelBuilder createTensorAccumulator(HATTensorOp.TensorCreateOp tensorCreateOp) {
         Value v = tensorCreateOp.result().uses().getFirst();
         Value shapeValue = tensorCreateOp.operands().getFirst();
-        List<Integer> shape = getShapeFromValueShape(shapeValue);
+        List<Integer> shape = obtainShapeTensor(shapeValue);
         Object klass = null;
         Value classOperand = tensorCreateOp.operands().getLast();
         if (classOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
@@ -408,70 +408,6 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
             return getValueConstantTensor(r.op().operands().getFirst());
         }
         return -1.0f;
-    }
-
-    private List<Integer> getShapeFromTensorCreateValue(Value tensorCreateValue) {
-        if (tensorCreateValue.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
-            // First parameters: analysis of the shape
-            Value valueShape = tensorCreateOp.operands().getFirst();
-            return getShapeFromValueShape(valueShape);
-        }
-        return List.of();
-    }
-
-    private List<Integer> processShapeTensor(List<Value> shapeOperands, List<Integer> shape) {
-        for (Value shapeOperand : shapeOperands) {
-            while (!(shapeOperand.declaringElement() instanceof CoreOp.ConstantOp)) {
-                if (shapeOperand.declaringElement() instanceof CoreOp.VarAccessOp.VarLoadOp varLoadOp) {
-                    shapeOperand = varLoadOp.varOperand();
-                } else if (shapeOperand.declaringElement() instanceof CoreOp.VarOp varOp) {
-                    shapeOperand = varOp.operands().getFirst();
-                }
-            }
-            if (shapeOperand.declaringElement() instanceof CoreOp.ConstantOp constantOp) {
-                shape.add((int) constantOp.value());
-            } else {
-                throw new OpenCLCodeGenException("Error: expected to find a ConstantOp, but found a " + shapeOperand.declaringElement().getClass());
-            }
-        }
-        return shape;
-    }
-
-    private List<Integer> obtainShapeTensor(Value shapeValue, List<Integer> shape) {
-        switch (shapeValue.declaringElement()) {
-            case JavaOp.InvokeOp invokeOp when invokeOp.invokeReference().name().equals("shape") -> {
-                List<Value> shapeOperands = invokeOp.operands();
-                return processShapeTensor(shapeOperands, shape);
-            }
-            case CoreOp.VarAccessOp varAccessOp -> obtainShapeTensor(varAccessOp.varOperand(), shape);
-            case CoreOp.VarOp varOp -> obtainShapeTensor(varOp.operands().getFirst(), shape);
-            case HATTensorOp.TensorShapeOp tensorShapeOp -> {
-                return processShapeTensor(tensorShapeOp.operands(), shape);
-            }
-            case HATTensorOp.TensorVarOp tensorVarOp -> obtainShapeTensor(tensorVarOp.operands().getFirst(), shape);
-            default ->
-                    throw new OpenCLCodeGenException("Op not expected: Found: " + shapeValue.declaringElement().getClass());
-        }
-        return shape;
-    }
-
-    private List<Integer> getShapeFromValueShape(Value shapeValue) {
-        List<Integer> shape = new ArrayList<>();
-        obtainShapeTensor(shapeValue, shape);
-        if (shape.size() != 3) {
-            throw new OpenCLCodeGenException("Shape must have three values, but it has " + shape.size());
-        }
-        return shape;
-    }
-
-    private List<Integer> getShapeFromTensorVarOp(HATTensorOp.TensorVarOp tensorVarOp) {
-        Value tensorCreateValueOp = tensorVarOp.operands().getFirst();
-        if (tensorCreateValueOp.declaringElement() instanceof HATTensorOp.TensorCreateOp tensorCreateOp) {
-            // First parameter: shapeValue
-            Value valueShape = tensorCreateOp.operands().getFirst();
-            return getShapeFromValueShape(valueShape);
-        }
-        return List.of();
     }
 
     private String generateVariableName(String prefix) {
@@ -842,7 +778,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         HATTensorOp.TensorVarOp tensorVarOp = findTensorVarOp(tensorLoadOp);
         List<Integer> shape;
         if (tensorVarOp != null) {
-            shape = getShapeFromValueShape(operands.get(4));
+            shape = obtainShapeTensor(operands.get(4));
         } else {
             throw new OpenCLCodeGenException("[Error][CodeGen] Expected to see an instance of tensorVarOp but `null` found");
         }
