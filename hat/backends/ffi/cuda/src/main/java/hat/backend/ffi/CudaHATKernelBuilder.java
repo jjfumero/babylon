@@ -850,9 +850,11 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         List<Value> operands = tensorStoreOp.operands();
         // Access layout is the last operand
         final boolean isColumnMajor;
+        // Since the Access Layout is an optional parameter, we check
         if (tensorStoreOp.operands().size() == 6) {
-            isColumnMajor = isColumnMajor(operands.get(5));
+            isColumnMajor = isColumnMajor(operands.getLast());
         } else {
+            // use row major by default
             isColumnMajor = false;
         }
         return generateStoreTensor(operands, isColumnMajor);
