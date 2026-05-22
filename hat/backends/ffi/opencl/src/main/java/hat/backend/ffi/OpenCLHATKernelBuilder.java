@@ -275,11 +275,11 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         return self();
     }
 
-    public String findLoadVariance(Value tensorVar, Value v) {
+    private String findLoadVariance(Value tensorVar, Value v) {
         return v instanceof Op.Result r ? findLoadVariance(tensorVar, r.op()) : null;
     }
 
-    public String findLoadVariance(Value tensorVar, Op op) {
+    private String findLoadVariance(Value tensorVar, Op op) {
         String varianceName = null;
         switch (op) {
             case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
@@ -302,11 +302,11 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         return varianceName;
     }
 
-    public Value findShape(Value tensorVar, Value v) {
+    private Value findShape(Value tensorVar, Value v) {
         return v instanceof Op.Result r ? findShape(tensorVar, r.op()) : null;
     }
 
-    public Value findShape(Value tensorVar, Op op) {
+    private Value findShape(Value tensorVar, Op op) {
         Value shape = null;
         switch (op) {
             case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
@@ -390,7 +390,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         }
     }
 
-    static HATTensorOp.TensorVarOp findTensorVarOp(Value varLoadOp) {
+    private static HATTensorOp.TensorVarOp findTensorVarOp(Value varLoadOp) {
         return switch (varLoadOp.declaringElement()) {
             case HATTensorOp.TensorVarLoadOp tensorVarLoadOp -> findTensorVarOp(tensorVarLoadOp.operands().getFirst());
             case CoreOp.VarAccessOp.VarLoadOp varLoadOp2 -> findTensorVarOp(varLoadOp2.operands().getFirst());
@@ -399,7 +399,7 @@ public class OpenCLHATKernelBuilder extends C99HATKernelBuilder<OpenCLHATKernelB
         };
     }
 
-    static float getValueConstantTensor(Value v) {
+    private static float getValueConstantTensor(Value v) {
         if ((v instanceof Op.Result r && r.op() instanceof CoreOp.ConstantOp constant)) {
             Object valueConstant = constant.value();
             return (float) valueConstant;

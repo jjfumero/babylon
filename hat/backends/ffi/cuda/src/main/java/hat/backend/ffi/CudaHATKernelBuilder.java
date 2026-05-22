@@ -534,11 +534,11 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         return operandIndex;
     }
 
-    public String findLoadVariance(Value tensorVar, Value v) {
+    private String findLoadVariance(Value tensorVar, Value v) {
         return v instanceof Op.Result r ? findLoadVariance(tensorVar, r.op()) : null;
     }
 
-    public String findLoadVariance(Value tensorVar, Op op) {
+    private String findLoadVariance(Value tensorVar, Op op) {
         String varianceName = null;
         switch (op) {
             case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
@@ -561,11 +561,11 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
         return varianceName;
     }
 
-    public Value findAccessLayout(Value tensorVar, Value v) {
+    private Value findAccessLayout(Value tensorVar, Value v) {
         return v instanceof Op.Result r ? findAccessLayout(tensorVar, r.op()) : null;
     }
 
-    public Value findAccessLayout(Value tensorVar, Op op) {
+    private Value findAccessLayout(Value tensorVar, Op op) {
         Value valueLayout = null;
         switch (op) {
             case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
@@ -604,7 +604,7 @@ public class CudaHATKernelBuilder extends C99HATKernelBuilder<CudaHATKernelBuild
     private static final int INDEX_SHAPE = 4;
     private static final int INDEX_ACCESS = 5;
 
-    public Value findShape(Value tensorVar, Op op) {
+    private Value findShape(Value tensorVar, Op op) {
         Value shape = null;
         switch (op) {
             case HATTensorOp.TensorStoreLoadOp storeLoadOp -> {
