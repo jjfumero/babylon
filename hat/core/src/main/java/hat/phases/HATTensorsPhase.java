@@ -498,17 +498,30 @@ public record HATTensorsPhase() implements HATPhase {
         return transformWithPredicate(lookup, funcOp, new TensorStore()::transform, opsToProcess);
     }
 
+    @FunctionalInterface
+    private interface ActionTensorTransformer {
+        CoreOp.FuncOp apply(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp);
+    }
+
     @Override
     public CoreOp.FuncOp transform(MethodHandles.Lookup lookup, CoreOp.FuncOp funcOp) {
-        funcOp = createTensorsToRelocate(lookup, funcOp);
-        funcOp = createTensors(lookup, funcOp);
-        funcOp = tensorShape(lookup, funcOp);
-        funcOp = fillTensors(lookup, funcOp);
-        funcOp = zerosTensors(lookup, funcOp);
-        funcOp = mmaTensor(lookup, funcOp);
-        funcOp = mmaTensorWithStore(lookup, funcOp);
-        funcOp = tensorLoad(lookup, funcOp);
-        funcOp = tensorStoreOp(lookup, funcOp);
+        for (ActionTensorTransformer pass : tensorTransformer) {
+            funcOp = pass.apply(lookup, funcOp);
+        }
         return funcOp;
+    }
+
+    private static final List<ActionTensorTransformer> tensorTransformer = new ArrayList<>();
+
+    public HATTensorsPhase {
+        tensorTransformer.add(this::createTensorsToRelocate);
+        tensorTransformer.add(this::createTensors);
+        tensorTransformer.add(this::tensorShape);
+        tensorTransformer.add(this::fillTensors);
+        tensorTransformer.add(this::zerosTensors);
+        tensorTransformer.add(this::mmaTensor);
+        tensorTransformer.add(this::mmaTensorWithStore);
+        tensorTransformer.add(this::tensorLoad);
+        tensorTransformer.add(this::tensorStoreOp);
     }
 }
