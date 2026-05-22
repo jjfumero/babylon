@@ -102,7 +102,7 @@ public class TestTensors {
 
                 // Perform the MMA operation:
                 // acc = tensorA * tensorB + acc
-                Tensor.mma(acc, tensorA, tensorB, acc);
+                acc = Tensor.mma(tensorA, tensorB, acc);
             }
         }
         int cRow = warpM * WMMA_M;
@@ -148,17 +148,12 @@ public class TestTensors {
         for (int i = 0; i < size; i += WMMA_K) {
             int aRow = warpM * WMMA_M;
             int aCol = i;
-
             int bRow = i;
             int bCol = warpN * WMMA_N;
-
             if (aRow < lda && aCol < lda && bRow < ldb && bCol < ldb) {
-
                 Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16), Tensor.ofRowMajor());
                 Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16),Tensor.ofColumnMajor());
-
-                // acc = tensorA * tensorB + acc
-                Tensor.mma(acc, tensorA, tensorB, acc);
+                acc = Tensor.mma(tensorA, tensorB, acc);
             }
         }
         int cRow = warpM * WMMA_M;
@@ -210,7 +205,7 @@ public class TestTensors {
                 Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16), Tensor.ofRowMajor());
 
                 // acc = tensorA * tensorB + acc
-                Tensor.mma(acc, tensorA, tensorB, acc);
+                acc = Tensor.mma(tensorA, tensorB, acc);
             }
         }
         int cRow = warpM * WMMA_M;
@@ -230,9 +225,10 @@ public class TestTensors {
 
     @Reflect
     public static void mxmTensorsDefaultAccess(@RO KernelContext kc, @RO F16Array matrixA, @RO F16Array matrixB, @WO F32ArrayPadded matrixC, int size) {
-        final int WMMA_M = 16;
-        final int WMMA_N = 16;
-        final int WMMA_K = 16;
+        final int sizeShape = 16;
+        final int WMMA_M = sizeShape;
+        final int WMMA_N = sizeShape;
+        final int WMMA_K = sizeShape;
         int warpM = kc.gix / kc.wrs;
         int warpN = kc.giy;
 
@@ -240,21 +236,15 @@ public class TestTensors {
         final int ldb = 1024;
         final int ldc = 1024;
 
-        Tensor acc = Tensor.zeros(Tensor.shape(16, 16, 16), float.class);
-
+        var shape = Tensor.shape(sizeShape, sizeShape, sizeShape);
+        Tensor acc = Tensor.zeros(shape, float.class);
         for (int i = 0; i < size; i += WMMA_K) {
             int aRow = warpM * WMMA_M;
-            int aCol = i;
-
-            int bRow = i;
             int bCol = warpN * WMMA_N;
-
-            if (aRow < lda && aCol < lda && bRow < ldb && bCol < ldb) {
-                Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16));
-                Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16));
-
-                // acc = tensorA * tensorB + acc
-                Tensor.mma(acc, tensorA, tensorB, acc);
+            if (aRow < lda && i < lda && i < ldb && bCol < ldb) {
+                Tensor tensorA = Tensor.loadF16(matrixA, aRow, i, lda, shape);
+                Tensor tensorB = Tensor.loadF16(matrixB, i, bCol, ldb, shape);
+                acc = Tensor.mma(tensorA, tensorB, acc);
             }
         }
         int cRow = warpM * WMMA_M;

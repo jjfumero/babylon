@@ -148,12 +148,15 @@ public record Tensor(Shape shape, Class<?> klass, Access tensorAccess) implement
      * the equivalent functionality using loop-tiling.
      * </p>
      *
-     * @param result result of the MMA operation.
      * @param tensorA tensor that represents the first matrix.
      * @param tensorB tensor that represents the second matrix.
      * @param acc tensor accumulator
+     * @return result result of the MMA operation.
      */
-    public static void mma(Tensor result, Tensor tensorA, Tensor tensorB, Tensor acc) {
+    public static Tensor mma(Tensor tensorA, Tensor tensorB, Tensor acc) {
+        // This is used as a marker for the HAT Backend. When supporting the CPU,
+        // we will need to insert the content as well acc = add(dot(tensorA, tensorB), acc);
+        return new Tensor(acc.shape(), acc.klass, acc.tensorAccess);
     }
 
     /**

@@ -67,9 +67,10 @@ public class Main {
 
     @Reflect
     public static void mxmTensorsCM(@MappableIface.RO KernelContext kc, @MappableIface.RO F16Array matrixA, @MappableIface.RO F16Array matrixB, @MappableIface.WO F32Array matrixC, int size) {
-        final int WMMA_M = 16;
-        final int WMMA_N = 16;
-        final int WMMA_K = 16;
+        final int shapeSize = 16;
+        final int WMMA_M = shapeSize;
+        final int WMMA_N = shapeSize;
+        final int WMMA_K = shapeSize;
         int warpM = kc.gix / kc.wrs;
         int warpN = kc.giy;
 
@@ -77,22 +78,17 @@ public class Main {
         final int ldb = size;
         final int ldc = size;
 
+        var shape = Tensor.shape(WMMA_M, WMMA_N, WMMA_K);
+
         // Allocate the accumulator tensor and initialize to 0
-        Tensor acc = Tensor.zeros(Tensor.shape(16, 16, 16), float.class);
-
-        for (int i = 0; i < size; i += WMMA_K) {
+        Tensor acc = Tensor.zeros(shape, float.class);
+        for (int aCol = 0; aCol < size; aCol += WMMA_K) {
             int aRow = warpM * WMMA_M;
-            int aCol = i;
-
-            int bRow = i;
             int bCol = warpN * WMMA_N;
-
-            if (aRow < lda && aCol < lda && bRow < ldb && bCol < ldb) {
-                Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
-                Tensor tensorB = Tensor.loadF16(matrixB, bRow, bCol, ldb, Tensor.shape(16, 16, 16), Tensor.ofColumnMajor());
-
-                // acc = tensorA * tensorB + acc
-                Tensor.mma(acc, tensorA, tensorB, acc);
+            if (aRow < lda && aCol < lda && aCol < ldb && bCol < ldb) {
+                Tensor tensorA = Tensor.loadF16(matrixA, aRow, aCol, lda, shape, Tensor.ofColumnMajor());
+                Tensor tensorB = Tensor.loadF16(matrixB, aCol, bCol, ldb, shape, Tensor.ofColumnMajor());
+                acc = Tensor.mma(tensorA, tensorB, acc);
             }
         }
         int cRow = warpM * WMMA_M;

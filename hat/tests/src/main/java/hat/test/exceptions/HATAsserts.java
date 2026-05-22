@@ -71,7 +71,7 @@ public class HATAsserts {
         for (int i = 0; i < 4; i++) {
             var expectedValue = arrayExpected[i];
             var actualValue = arrayActual[i];
-            if (Math.abs(expectedValue - actualValue) > delta) {
+            if (Float.isNaN(actualValue) || Math.abs(expectedValue - actualValue) > delta) {
                 throw new HATAssertionError("Expected: " + expectedValue + " != actual: " + actualValue);
             }
         }
@@ -83,7 +83,7 @@ public class HATAsserts {
         for (int i = 0; i < 2; i++) {
             var expectedValue = arrayExpected[i];
             var actualValue = arrayActual[i];
-            if (Math.abs(expectedValue - actualValue) > delta) {
+            if (Float.isNaN(actualValue) || Math.abs(expectedValue - actualValue) > delta) {
                 throw new HATAssertionError("Expected: " + expectedValue + " != actual: " + actualValue);
             }
         }
@@ -99,5 +99,9 @@ public class HATAsserts {
         if (isCorrect) {
             throw new HATAssertionError("Expected: " + isCorrect);
         }
+    }
+
+    private HATAsserts() {
+        /* This utility class should not be instantiated */
     }
 }
