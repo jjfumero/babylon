@@ -399,7 +399,6 @@ public class Trxfmr implements LookupCarrier{
                     if (listener!= null) {
                         listener.remap(funcOp, cursorOp, opFromResult);
                     }
-                   // update(funcOp().funcName(), cursorOp, opFromResult, varTable);
                     biMap.add(cursorOp, opFromResult);
                 }catch (Throwable t){
                     throw new RuntimeException(t);
