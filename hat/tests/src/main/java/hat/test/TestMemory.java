@@ -53,6 +53,9 @@ public class TestMemory {
 
     @HatTest
     public void test01() {
+
+        // Test Host Array -> Segment with HAT -> Output Segment from a kernel -> host output array
+
         var accelerator = new Accelerator(MethodHandles.lookup(), Backend.FIRST);
 
         final int n = 8;
@@ -75,9 +78,9 @@ public class TestMemory {
         IO.println(Arrays.toString(input.arrayView()));
         IO.println(Arrays.toString(hostOutput));
         IO.println(Arrays.toString(output.arrayView()));
-        
+
         for (int i = 0; i < n; i++) {
-            HATAsserts.assertEquals(hostArray[i] * 2.0f, output.array(i), 0.0f);
+            HATAsserts.assertEquals(hostArray[i] * 2.0f, hostOutput[i], 0.0f);
         }
 
     }
